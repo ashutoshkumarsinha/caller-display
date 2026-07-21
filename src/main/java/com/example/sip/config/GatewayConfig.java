@@ -45,6 +45,7 @@ public final class GatewayConfig {
     private final Duration hssSlidingWindow;
     private final float apnsFailureRateThreshold;
     private final float fcmFailureRateThreshold;
+    private final String diameterTransport;
 
     private GatewayConfig(Builder b) {
         this.defaultCountryCode = b.defaultCountryCode;
@@ -78,6 +79,7 @@ public final class GatewayConfig {
         this.hssSlidingWindow = b.hssSlidingWindow;
         this.apnsFailureRateThreshold = b.apnsFailureRateThreshold;
         this.fcmFailureRateThreshold = b.fcmFailureRateThreshold;
+        this.diameterTransport = b.diameterTransport;
     }
 
     /**
@@ -147,6 +149,7 @@ public final class GatewayConfig {
                         get(config, "gateway.cb.apns.failure-rate-threshold", "10")))
                 .fcmFailureRateThreshold(Float.parseFloat(
                         get(config, "gateway.cb.fcm.failure-rate-threshold", "10")))
+                .diameterTransport(get(config, "gateway.diameter.transport", "jdiameter"))
                 .build();
     }
 
@@ -310,6 +313,11 @@ public final class GatewayConfig {
         return fcmFailureRateThreshold;
     }
 
+    /** {@code jdiameter} (default) or {@code mock} for lab/CI without peers. */
+    public String diameterTransport() {
+        return diameterTransport;
+    }
+
     public static final class Builder {
         private String defaultCountryCode = "1";
         private boolean stripTrunkPrefix = true;
@@ -342,6 +350,7 @@ public final class GatewayConfig {
         private Duration hssSlidingWindow = Duration.ofSeconds(10);
         private float apnsFailureRateThreshold = 10f;
         private float fcmFailureRateThreshold = 10f;
+        private String diameterTransport = "jdiameter";
 
         public Builder defaultCountryCode(String value) {
             this.defaultCountryCode = Objects.requireNonNull(value);
@@ -495,6 +504,11 @@ public final class GatewayConfig {
 
         public Builder fcmFailureRateThreshold(float value) {
             this.fcmFailureRateThreshold = value;
+            return this;
+        }
+
+        public Builder diameterTransport(String value) {
+            this.diameterTransport = Objects.requireNonNull(value);
             return this;
         }
 

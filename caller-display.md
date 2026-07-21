@@ -119,8 +119,8 @@ After MSISDN normalization, the servlet acts as a Diameter Sh client against the
 |---|---|
 | Application | Sh (`Application-Id = 16777217`) |
 | Vendor | 3GPP (`Vendor-Id = 10415`) |
-| Request | User-Data-Request (`UDR`, Command-Code = 308) |
-| Answer | User-Data-Answer (`UDA`, Command-Code = 308) |
+| Request | User-Data-Request (`UDR`, Command-Code = 306) |
+| Answer | User-Data-Answer (`UDA`, Command-Code = 306) |
 | Update (token cleanup) | Profile-Update-Request (`PUR`, Command-Code = 307) |
 
 #### AVP construction

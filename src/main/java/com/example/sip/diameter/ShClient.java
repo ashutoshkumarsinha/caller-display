@@ -1,6 +1,7 @@
 package com.example.sip.diameter;
 
 import com.example.sip.config.GatewayConfig;
+import com.example.sip.metrics.GatewayMetrics;
 import com.example.sip.model.PushPlatform;
 import com.example.sip.model.PushTokenRecord;
 import org.slf4j.Logger;
@@ -12,63 +13,129 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Diameter Sh client (UDR / PUR) using realm-based routing.
+ * Diameter Sh client (UDR / PUR) using realm-based routing via {@link DiameterTransport}.
  *
- * <p>Stack wiring to jDiameter is intentionally isolated here. UDR/PUR always set
- * {@code Destination-Realm} and omit {@code Destination-Host} when configured.
+ * <p>Default production transport is {@link JDiameterTransport}. Tests inject
+ * {@link MockHssDiameterTransport}.
  */
 public class ShClient implements ShClientApi {
 
     private static final Logger LOG = LoggerFactory.getLogger(ShClient.class);
     private static final Pattern DEVICE_TOKEN = Pattern.compile(
-            "<DeviceToken>\\s*([^<]+)\\s*</DeviceToken>", Pattern.CASE_INSENSITIVE);
+            "<DeviceToken>\\s*([^<]*)\\s*</DeviceToken>", Pattern.CASE_INSENSITIVE);
     private static final Pattern PLATFORM = Pattern.compile(
-            "<Platform>\\s*([^<]+)\\s*</Platform>", Pattern.CASE_INSENSITIVE);
+            "<Platform>\\s*([^<]*)\\s*</Platform>", Pattern.CASE_INSENSITIVE);
     private static final Pattern SEQUENCE = Pattern.compile(
             "<SequenceNumber>\\s*(\\d+)\\s*</SequenceNumber>", Pattern.CASE_INSENSITIVE);
 
     private final GatewayConfig config;
+    private final DiameterTransport transport;
+    private final GatewayMetrics metrics;
+    private final ShMessageFactory messageFactory;
     private volatile boolean started;
 
     public ShClient(GatewayConfig config) {
-        this.config = config;
+        this(config, new JDiameterTransport(), new GatewayMetrics());
     }
 
+    public ShClient(GatewayConfig config, DiameterTransport transport, GatewayMetrics metrics) {
+        this.config = config;
+        this.transport = transport;
+        this.metrics = metrics;
+        this.messageFactory = new ShMessageFactory(config);
+    }
+
+    @Override
     public synchronized void start() {
         if (started) {
             return;
         }
-        // TODO: bootstrap jDiameter from classpath:/jdiameter-config.xml
-        LOG.info("ShClient starting (realm routing, omitDestinationHost={})",
-                config.omitDestinationHost());
+        transport.start();
         started = true;
+        LOG.info(
+                "ShClient started (omitDestinationHost={}, timeout={}ms)",
+                config.omitDestinationHost(),
+                config.diameterMessageTimeout().toMillis());
     }
 
-    /**
-     * Issues a realm-routed User-Data-Request for the callee MSISDN.
-     */
+    @Override
     public CompletableFuture<Optional<PushTokenRecord>> userDataRequest(
             String normalizedCalleeMsisdn,
             String destinationRealm) {
         start();
-        LOG.debug("UDR callee={} destinationRealm={}", normalizedCalleeMsisdn, destinationRealm);
-        // TODO: build UDR with Destination-Realm=destinationRealm, User-Identity=tel:<msisdn>
-        // TODO: send via jDiameter Sh Application-Id 16777217; await UDA within message timeout
-        return CompletableFuture.completedFuture(Optional.empty());
+        metrics.incrementRealmRoute(destinationRealm);
+
+        if (!transport.hasOpenPeerForRealm(destinationRealm)) {
+            metrics.incrementRealmNoPeer(destinationRealm);
+            metrics.incrementHssFailure(destinationRealm, ShAnswer.Outcome.NO_PEER.name().toLowerCase());
+            LOG.warn("No OPEN Diameter peer for realm={}", destinationRealm);
+            return CompletableFuture.completedFuture(Optional.empty());
+        }
+
+        ShUdrRequest udr = messageFactory.createUdr(normalizedCalleeMsisdn, destinationRealm);
+        LOG.debug(
+                "UDR callee={} destinationRealm={} userIdentity={} omitHost={}",
+                normalizedCalleeMsisdn,
+                udr.destinationRealm(),
+                udr.userIdentityTel(),
+                udr.omitDestinationHost());
+
+        return transport
+                .sendUdr(udr, config.diameterMessageTimeout())
+                .thenApply(answer -> toTokenRecord(destinationRealm, answer));
     }
 
-    /**
-     * Clears or flags a stale device token via Profile-Update-Request.
-     */
+    @Override
     public CompletableFuture<Void> purgeToken(
             String normalizedCalleeMsisdn,
             String destinationRealm,
             long nextSequenceNumber) {
         start();
-        LOG.info("PUR token cleanup callee={} realm={} seq={}",
-                normalizedCalleeMsisdn, destinationRealm, nextSequenceNumber);
-        // TODO: build PUR Sh-Data with empty DeviceToken / same Service-Indication
-        return CompletableFuture.completedFuture(null);
+        ShPurRequest pur =
+                messageFactory.createTokenPurge(normalizedCalleeMsisdn, destinationRealm, nextSequenceNumber);
+        LOG.info(
+                "PUR token cleanup callee={} realm={} seq={} userIdentity={}",
+                normalizedCalleeMsisdn,
+                destinationRealm,
+                nextSequenceNumber,
+                pur.userIdentityTel());
+
+        return transport
+                .sendPur(pur, config.diameterMessageTimeout())
+                .thenAccept(answer -> {
+                    if (!answer.success()) {
+                        metrics.incrementHssFailure(destinationRealm, "pur_" + answer.failureCause());
+                        LOG.warn(
+                                "PUR failed callee={} realm={} cause={}",
+                                normalizedCalleeMsisdn,
+                                destinationRealm,
+                                answer.failureCause());
+                    }
+                });
+    }
+
+    private Optional<PushTokenRecord> toTokenRecord(String destinationRealm, ShAnswer answer) {
+        if (answer.outcome() == ShAnswer.Outcome.NO_PEER) {
+            metrics.incrementRealmNoPeer(destinationRealm);
+            metrics.incrementHssFailure(destinationRealm, answer.failureCause());
+            return Optional.empty();
+        }
+        if (!answer.success()) {
+            metrics.incrementHssFailure(destinationRealm, answer.failureCause());
+            LOG.warn(
+                    "UDR failed realm={} cause={} code={} detail={}",
+                    destinationRealm,
+                    answer.failureCause(),
+                    answer.resultCode(),
+                    answer.detail().orElse(""));
+            return Optional.empty();
+        }
+        Optional<PushTokenRecord> parsed = answer.userDataXml().flatMap(ShClient::parseUserDataXml);
+        if (parsed.isEmpty()) {
+            metrics.incrementHssFailure(destinationRealm, "malformed_xml");
+            LOG.warn("UDA missing/invalid User-Data XML realm={}", destinationRealm);
+        }
+        return parsed;
     }
 
     public static Optional<PushTokenRecord> parseUserDataXml(String xml) {
@@ -81,7 +148,8 @@ public class ShClient implements ShClientApi {
             return Optional.empty();
         }
         String token = tokenMatcher.group(1).trim();
-        if (token.isEmpty()) {
+        String platform = platformMatcher.group(1).trim();
+        if (token.isEmpty() || platform.isEmpty()) {
             return Optional.empty();
         }
         long sequence = 0L;
@@ -89,15 +157,25 @@ public class ShClient implements ShClientApi {
         if (seqMatcher.find()) {
             sequence = Long.parseLong(seqMatcher.group(1));
         }
-        return Optional.of(new PushTokenRecord(
-                token,
-                PushPlatform.fromHssValue(platformMatcher.group(1)),
-                sequence));
+        try {
+            return Optional.of(new PushTokenRecord(token, PushPlatform.fromHssValue(platform), sequence));
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
+    }
+
+    /** Exposed for tests. */
+    ShMessageFactory messageFactory() {
+        return messageFactory;
     }
 
     @Override
     public synchronized void close() {
         started = false;
-        LOG.info("ShClient stopped");
+        try {
+            transport.close();
+        } finally {
+            LOG.info("ShClient stopped");
+        }
     }
 }

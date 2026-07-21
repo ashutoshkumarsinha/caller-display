@@ -101,4 +101,19 @@ public final class GatewayMetrics {
     public long workerQueueDepth() {
         return workerQueueDepth.get();
     }
+
+    public long hssFailureCount(String realm, String cause) {
+        AtomicLong value = hssFailuresByRealm.get(realm + "|" + cause);
+        return value == null ? 0L : value.get();
+    }
+
+    public long realmNoPeerCount(String realm) {
+        AtomicLong value = realmNoPeer.get(realm);
+        return value == null ? 0L : value.get();
+    }
+
+    public long realmRouteCount(String realm) {
+        AtomicLong value = realmRoutes.get(realm);
+        return value == null ? 0L : value.get();
+    }
 }

@@ -7,7 +7,7 @@ Phased plan to take the scaffolded SIP HTTP Push Gateway from stubs to a carrier
 ```
 Phase 0 ──► Phase 1 ──► Phase 2 ──► Phase 3 ──► Phase 4 ──► Phase 5 ──► Phase 6
  Hardening   Diameter    Push I/O    Resilience  Observe     Security    HA / Ops
- ✅ done     Sh UDR/PUR  end-to-end  & limits    metrics     & secrets   scale
+ ✅ done     ✅ done     end-to-end  & limits    metrics     & secrets   scale
 ```
 
 ---
@@ -60,20 +60,18 @@ Package tests next to code under `src/test/java/com/example/sip/…`. Name tests
 | T0.2 | `FakeShClient` returns canned `PushTokenRecord` for a callee | Test double API used by processor tests | **Done** |
 | T0.3 | `RecordingPushClient` stores last JSON body and `platform` field | Shared push contract helper | **Done** |
 
-#### Phase 1 — Diameter (write tests before jDiameter wiring)
+#### Phase 1 — Diameter ✅
 
-| Order | RED test first | Spec anchor |
-|---|---|---|
-| T1.1 | UDR builder sets `Destination-Realm` to router output | §3.2.1 |
-| T1.2 | UDR builder omits `Destination-Host` when `omit-destination-host=true` | §3.2.1 |
-| T1.3 | `User-Identity` is `tel:<normalized MSISDN>` | §3.2 AVPs |
-| T1.4 | UDA XML → `PushTokenRecord` (extend `ShClientParseTest` for FCM, missing fields, empty token) | §3.2 schema |
-| T1.5 | Timeout / `USER_UNKNOWN` → empty Optional, failure metric, **no** push interaction | §9.3 |
-| T1.6 | Unknown realm / no OPEN peer → `realm_no_peer` metric path | §7.1 |
-| T1.7 | PUR payload clears token and bumps sequence | §11 |
-| T1.8 | *(contract)* Mock HSS: request for realm A never lands on realm B peer | §4.3 |
-
-Implement jDiameter send/receive only after T1.1–T1.4 are green against a request-builder / parser unit seam. Keep stack I/O behind an interface so unit tests never need a live peer.
+| Order | RED test first | Spec anchor | Status |
+|---|---|---|---|
+| T1.1 | UDR builder sets `Destination-Realm` to router output | §3.2.1 | **Done** |
+| T1.2 | UDR builder omits `Destination-Host` when configured | §3.2.1 | **Done** |
+| T1.3 | `User-Identity` is `tel:<normalized MSISDN>` | §3.2 AVPs | **Done** |
+| T1.4 | UDA XML → `PushTokenRecord` (APNS/FCM/empty/missing) | §3.2 schema | **Done** |
+| T1.5 | Timeout / `USER_UNKNOWN` → empty Optional + failure metric | §9.3 | **Done** |
+| T1.6 | Unknown realm / no OPEN peer → `realm_no_peer` | §7.1 | **Done** |
+| T1.7 | PUR payload clears token and bumps sequence | §11 | **Done** |
+| T1.8 | Mock HSS: realm A never lands on realm B peer | §4.3 | **Done** |
 
 #### Phase 2 — Push (contract-first)
 
@@ -170,23 +168,27 @@ Finish the foundation so later phases plug in cleanly.
 
 ---
 
-## Phase 1 — Diameter Sh client (critical path)
+## Phase 1 — Diameter Sh client (critical path) *(complete)*
 
 Unblock HSS lookups. Everything push-related depends on real UDR answers.
 
-| # | Work item | Priority | Deliverable |
-|---|---|---|---|
-| 1.1 | Bootstrap jDiameter from `jdiameter-config.xml` | P0 | `ShClient.start()` creates stack + Sh session factory |
-| 1.2 | Build UDR with required AVPs | P0 | `Destination-Realm`, `User-Identity=tel:…`, no `Destination-Host` when configured |
-| 1.3 | Await UDA within `MessageTimeout` | P0 | Parse `User-Data` XML → `PushTokenRecord` |
-| 1.4 | Map Diameter result codes | P0 | `USER_UNKNOWN`, unable-to-deliver, timeout → metrics + no push |
-| 1.5 | Realm-routed multi-peer failover | P0 | Verify stack selects OPEN peers by realm (packet/lab capture) |
-| 1.6 | Profile-Update-Request (`PUR`) for token purge | P1 | Empty/flag `DeviceToken`, bump sequence |
-| 1.7 | Diameter lab / mock HSS | P1 | Deterministic UDA fixtures for CI |
+| # | Work item | Priority | Status | Deliverable |
+|---|---|---|---|---|
+| 1.1 | Bootstrap jDiameter from `jdiameter-config.xml` | P0 | **Done** | `JDiameterTransport` loads `/jdiameter-config.xml` |
+| 1.2 | Build UDR with required AVPs | P0 | **Done** | `ShMessageFactory` + jDiameter raw UDR (cmd **306**) |
+| 1.3 | Await UDA within `MessageTimeout` | P0 | **Done** | Transport timeout → empty Optional |
+| 1.4 | Map Diameter result codes | P0 | **Done** | `ShAnswer` maps success / user_unknown / unable_to_deliver / … |
+| 1.5 | Realm-routed multi-peer failover | P0 | **Done** | Destination-Realm only; mock proves realm A ≠ realm B peer |
+| 1.6 | Profile-Update-Request (`PUR`) for token purge | P1 | **Done** | cmd **307** + clear-token XML |
+| 1.7 | Diameter lab / mock HSS | P1 | **Done** | `MockHssDiameterTransport`; `gateway.diameter.transport=mock\|jdiameter` |
 
-**Exit criteria:** Against a lab HSS (or mock), UDR by realm returns token+platform; PUR clears stale tokens; timeouts never block the SIP thread.
+**TDD:** T1.1–T1.8 covered by `ShMessageFactoryTest`, `ShClientParseTest`, `ShAnswerMappingTest`, `ShClientMockHssTest`.
 
-**Risks:** jDiameter version quirks; TLS peer certs; HSS XML schema variance — keep XML parsing tolerant and covered by tests.
+**Exit criteria:** Mock HSS UDR by realm returns token+platform; PUR clears tokens; timeouts/no-peer never throw to callers. ✅
+
+**Note:** Sh UDR command code is **306** (3GPP / jDiameter), not 308 as briefly listed in an earlier draft of the product spec.
+
+**Risks:** Live HSS/TLS still needs lab validation of `JDiameterTransport` AVP encoding against a real peer.
 
 ---
 

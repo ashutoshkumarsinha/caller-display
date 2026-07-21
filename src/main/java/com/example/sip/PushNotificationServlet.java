@@ -2,6 +2,9 @@ package com.example.sip;
 
 import com.example.sip.cache.TokenCache;
 import com.example.sip.config.GatewayConfig;
+import com.example.sip.diameter.DiameterTransport;
+import com.example.sip.diameter.JDiameterTransport;
+import com.example.sip.diameter.MockHssDiameterTransport;
 import com.example.sip.diameter.RealmRouter;
 import com.example.sip.diameter.ShClient;
 import com.example.sip.diameter.ShClientApi;
@@ -55,7 +58,8 @@ public class PushNotificationServlet extends SipServlet {
         normalizer = new MsisdnNormalizer(config);
         realmRouter = new RealmRouter(config);
         tokenCache = new TokenCache(config, java.time.Clock.systemUTC(), metrics::setTokenCacheSize);
-        shClient = new ShClient(config);
+        DiameterTransport transport = createDiameterTransport(config);
+        shClient = new ShClient(config, transport, metrics);
         shClient.start();
 
         HttpClient httpClient = HttpClient.newBuilder()
@@ -81,8 +85,16 @@ public class PushNotificationServlet extends SipServlet {
                 interval.toSeconds(),
                 TimeUnit.SECONDS);
 
-        LOG.info("PushNotificationServlet initialized (defaultRealm={})",
-                config.defaultDestinationRealm());
+        LOG.info("PushNotificationServlet initialized (defaultRealm={}, diameterTransport={})",
+                config.defaultDestinationRealm(), config.diameterTransport());
+    }
+
+    private static DiameterTransport createDiameterTransport(GatewayConfig config) {
+        if ("mock".equalsIgnoreCase(config.diameterTransport())) {
+            LOG.warn("Using MockHssDiameterTransport (gateway.diameter.transport=mock)");
+            return new MockHssDiameterTransport();
+        }
+        return new JDiameterTransport();
     }
 
     @Override
