@@ -2,12 +2,12 @@
 
 Phased plan to take the scaffolded SIP HTTP Push Gateway from stubs to a carrier-grade deployment. Source of truth for behavior: [caller-display.md](caller-display.md).
 
-**Current baseline:** Maven WAR builds; SIP extract → enqueue, MSISDN/realm routing, token cache, APNS/FCM payload builders, and unit tests are in place. Live Diameter I/O, Resilience4j, and full observability exporters are not.
+**Current baseline:** Maven WAR builds through Phase 4 (Diameter, push I/O, Resilience4j, Micrometer/OTel/MDC/JMX). Next: security/secrets (Phase 5) and HA/ops (Phase 6).
 
 ```
 Phase 0 ──► Phase 1 ──► Phase 2 ──► Phase 3 ──► Phase 4 ──► Phase 5 ──► Phase 6
  Hardening   Diameter    Push I/O    Resilience  Observe     Security    HA / Ops
- ✅ done     ✅ done     ✅ done     ✅ done     metrics     & secrets   scale
+    ✅ done     ✅ done     ✅ done     ✅ done     ✅ done     & secrets   scale
 ```
 
 ---
@@ -96,13 +96,13 @@ Package tests next to code under `src/test/java/com/example/sip/…`. Name tests
 | T3.4 | Full worker queue increments drop metric and does not throw to SIP thread | §9.2 | **Done** |
 | T3.5 | Retry on 503 with jitter; **no** retry on 410 | §3.3.3 / §9 | **Done** |
 
-#### Phase 4 — Observability
+#### Phase 4 — Observability ✅
 
-| Order | RED test first | Spec anchor |
-|---|---|---|
-| T4.1 | Successful ringing path increments `sip_ringing_intercepts` and platform success counter | §8.1 |
-| T4.2 | Logs/MDC contain `callId` for processor warnings (append-only test appender) | §8.3 |
-| T4.3 | Histogram/timer recorded for HSS lookup duration (fake clock or mock timer) | §8.1 |
+| Order | RED test first | Spec anchor | Status |
+|---|---|---|---|
+| T4.1 | Successful ringing path increments `sip_ringing_intercepts` and platform success counter | §8.1 | **Done** |
+| T4.2 | Logs/MDC contain `callId` for processor warnings (append-only test appender) | §8.3 | **Done** |
+| T4.3 | Histogram/timer recorded for HSS lookup duration (fake clock or mock timer) | §8.1 | **Done** |
 
 #### Phase 5 — Security
 
@@ -230,20 +230,22 @@ Survive HSS/push outages without starving the JVM or IMS.
 
 ---
 
-## Phase 4 — Observability
+## Phase 4 — Observability ✅
 
 Make the gateway operable.
 
-| # | Work item | Priority | Deliverable |
-|---|---|---|---|
-| 4.1 | Map `GatewayMetrics` → MP Metrics / Micrometer | P0 | Counters/histograms from the spec |
-| 4.2 | OpenTelemetry traces | P1 | Span: SIP enqueue → UDR → HTTP push; `callId` / `eventId` baggage |
-| 4.3 | MDC structured logging | P0 | `callId`, `eventId`, `callee`, `realm`, `platform` on every log line |
-| 4.4 | JMX MBeans | P2 | `PushStats`, `HssStats`, `WorkerPool`, `TokenCache`, per-realm |
-| 4.5 | Grafana dashboard JSON | P1 | p99 HSS latency, queue depth, push errors by platform/code |
-| 4.6 | Alert rules | P1 | p99 &gt; 200 ms; queue &gt; 500; realm no-peer; breaker open |
+| # | Work item | Priority | Status | Deliverable |
+|---|---|---|---|---|
+| 4.1 | Map `GatewayMetrics` → Micrometer | P0 | **Done** | Counters/timers/gauges (`hss_lookup_latency_seconds`, etc.) |
+| 4.2 | OpenTelemetry traces | P1 | **Done** | Spans: `gateway.ringing.process`, `.hss.udr`, `.push.send` |
+| 4.3 | MDC structured logging | P0 | **Done** | `CallMdc` ThreadLocal + SLF4J mirror; async push propagation |
+| 4.4 | JMX MBeans | P2 | **Done** | `GatewayJmxRegistrar` under `com.example.pushgateway:*` |
+| 4.5 | Grafana dashboard JSON | P1 | **Done** | `ops/grafana/push-gateway-dashboard.json` |
+| 4.6 | Alert rules | P1 | **Done** | `ops/alerts/push-gateway-alerts.yaml` |
 
-**Exit criteria:** `/metrics` scrape works on Liberty; one call can be traced SIP → Diameter → push via `Call-ID`.
+**TDD:** T4.1–T4.3 in `ObservabilityPhase4Test`.
+
+**Exit criteria:** Micrometer registry wired; call traced SIP → HSS → push via `callId`/OTel; MDC + JMX + ops dashboards/alerts. ✅
 
 ---
 

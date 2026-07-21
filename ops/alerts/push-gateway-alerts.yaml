@@ -1,0 +1,59 @@
+groups:
+  - name: sip-http-push-gateway
+    rules:
+      - alert: HssLookupLatencyP99High
+        expr: histogram_quantile(0.99, sum(rate(hss_lookup_latency_seconds_bucket[5m])) by (le)) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: HSS lookup p99 exceeds 200ms
+          description: Diameter Sh latency is above the carrier budget (spec §8.1).
+
+      - alert: WorkerQueueDepthHigh
+        expr: worker_pool_queue_depth > 500
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Push worker queue depth > 500
+          description: Backpressure is building; drops or SIP handoff delays may follow.
+
+      - alert: HssRealmNoPeer
+        expr: increase(hss_realm_no_peer_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: No OPEN Diameter peer for a destination realm
+          description: Realm-based routing cannot deliver UDRs.
+
+      - alert: PushCircuitBreakerOpen
+        expr: |
+          (
+            increase(push_delivery_errors_total{code="circuit_open"}[5m]) > 0
+          )
+          or
+          (
+            increase(hss_lookup_failures_total{cause="circuit_open"}[5m]) > 0
+          )
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Circuit breaker open (HSS or push)
+          description: Fail-fast path is active; investigate upstream dependency health.
+
+      - alert: PushDeliveryErrorRateHigh
+        expr: |
+          (
+            sum(rate(push_delivery_errors_total[5m]))
+            /
+            clamp_min(sum(rate(push_delivery_success_total[5m])) + sum(rate(push_delivery_errors_total[5m])), 0.001)
+          ) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Push error rate above 10%
+          description: Check APNS/FCM status, tokens, and auth refresh.

@@ -1,0 +1,102 @@
+{
+  "title": "SIP HTTP Push Gateway",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "tags": ["caller-display", "push-gateway"],
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "SIP 180 intercepts",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(sip_ringing_intercepts_total[1m])",
+          "legendFormat": "ringing/s"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "HSS lookup latency p99",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(hss_lookup_latency_seconds_bucket[5m])) by (le, destination_realm))",
+          "legendFormat": "p99 {{destination_realm}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Push success by platform",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(push_delivery_success_total[1m])",
+          "legendFormat": "{{platform}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Push errors by platform/code",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(push_delivery_errors_total[1m])",
+          "legendFormat": "{{platform}} {{code}}"
+        }
+      ]
+    },
+    {
+      "type": "gauge",
+      "title": "Worker queue depth",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "worker_pool_queue_depth",
+          "legendFormat": "depth"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 200 },
+              { "color": "red", "value": 500 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Token cache size",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "targets": [
+        {
+          "expr": "token_cache_size",
+          "legendFormat": "entries"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "HSS failures / realm no-peer",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "targets": [
+        {
+          "expr": "rate(hss_lookup_failures_total[1m])",
+          "legendFormat": "fail {{destination_realm}} {{cause}}"
+        },
+        {
+          "expr": "rate(hss_realm_no_peer_total[1m])",
+          "legendFormat": "no-peer {{destination_realm}}"
+        }
+      ]
+    }
+  ]
+}

@@ -13,14 +13,13 @@ src/main/java/com/example/sip/
 ├── PushNotificationServlet.java   # SIP 180 intercept + async handoff
 ├── config/GatewayConfig.java
 ├── identity/MsisdnNormalizer.java
-├── diameter/RealmRouter.java      # Destination-Realm resolution
-├── diameter/ShClient.java         # Sh UDR/PUR (jDiameter wiring TODO)
+├── diameter/…                     # RealmRouter, ShClient, transports
 ├── cache/TokenCache.java
-├── push/ApnsClient.java
-├── push/FcmClient.java
-├── worker/AsyncWorkerPool.java
-├── worker/RingingProcessor.java
-└── metrics/GatewayMetrics.java
+├── push/ApnsClient.java / FcmClient.java
+├── resilience/…                   # Breakers, rate limit, retries
+├── worker/AsyncWorkerPool.java / RingingProcessor.java
+├── metrics/GatewayMetrics.java    # Micrometer bridge
+└── observability/                 # CallMdc, GatewayTracing, JMX
 ```
 
 ## Prerequisites
@@ -69,6 +68,7 @@ Diameter peers/realms: `src/main/resources/jdiameter-config.xml`.
 | Phase 1 — Diameter Sh UDR/PUR | **Done** (mock HSS + jDiameter transport) |
 | Phase 2 — APNS/FCM push + purge loop | **Done** (WireMock contracts) |
 | Phase 3 — Resilience / backpressure | **Done** (breakers, rate limit, retries) |
+| Phase 4 — Observability | **Done** (Micrometer, OTel spans, MDC, JMX, Grafana/alerts) |
 | SIP 180 extract + enqueue | Scaffolded |
 | MSISDN / anonymous / domain parsing | Implemented + tests |
 | Realm-based Destination-Realm routing | Implemented + tests |
@@ -76,4 +76,4 @@ Diameter peers/realms: `src/main/resources/jdiameter-config.xml`.
 | APNS / FCM HTTP payload + headers | **Done** |
 | jDiameter stack send/receive | Implemented (`JDiameterTransport`); lab peer validation remaining |
 | Resilience4j breakers / rate limits | **Done** |
-| JMX / OTel export | Metrics facade ready; exporter wiring TODO — Phase 4 |
+| Micrometer / OTel / MDC / JMX | **Done** (`ObservabilityPhase4Test`); Liberty `/metrics` scrape in lab |

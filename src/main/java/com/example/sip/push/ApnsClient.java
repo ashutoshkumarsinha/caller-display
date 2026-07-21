@@ -3,6 +3,7 @@ package com.example.sip.push;
 import com.example.sip.config.GatewayConfig;
 import com.example.sip.model.PushTokenRecord;
 import com.example.sip.model.RingingEvent;
+import com.example.sip.observability.CallMdc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,11 +74,24 @@ public final class ApnsClient implements PushClient {
                 builder.header("Authorization", "Bearer " + bearer);
             }
 
+            Map<String, String> context = CallMdc.copy();
             return httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString())
-                    .thenApply(response -> mapResponse(event, response))
+                    .thenApply(response -> {
+                        CallMdc.restore(context);
+                        try {
+                            return mapResponse(event, response);
+                        } finally {
+                            CallMdc.clear();
+                        }
+                    })
                     .exceptionally(ex -> {
-                        LOG.warn("APNS push error callId={}: {}", event.callId(), ex.toString());
-                        return PushResult.failure(0, "apns_transport", false);
+                        CallMdc.restore(context);
+                        try {
+                            LOG.warn("APNS push error callId={}: {}", event.callId(), ex.toString());
+                            return PushResult.failure(0, "apns_transport", false);
+                        } finally {
+                            CallMdc.clear();
+                        }
                     });
         } catch (Exception e) {
             return CompletableFuture.completedFuture(PushResult.failure(0, "apns_build", false));

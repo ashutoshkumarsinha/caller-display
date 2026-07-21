@@ -11,6 +11,8 @@ import com.example.sip.diameter.ShClientApi;
 import com.example.sip.identity.MsisdnNormalizer;
 import com.example.sip.metrics.GatewayMetrics;
 import com.example.sip.model.RingingEvent;
+import com.example.sip.observability.GatewayJmxRegistrar;
+import com.example.sip.observability.GatewayTracing;
 import com.example.sip.push.ApnsClient;
 import com.example.sip.push.FcmClient;
 import com.example.sip.push.PushClient;
@@ -53,17 +55,22 @@ public class PushNotificationServlet extends SipServlet {
     private ShClientApi shClient;
     private RingingProcessor processor;
     private ScheduledExecutorService evictor;
+    private GatewayJmxRegistrar jmx;
+    private GatewayTracing tracing;
 
     @Override
     public void init() throws ServletException {
         super.init();
         config = GatewayConfig.fromEnvironment();
         metrics = new GatewayMetrics();
+        tracing = new GatewayTracing();
+        jmx = new GatewayJmxRegistrar();
         normalizer = new MsisdnNormalizer(config);
         realmRouter = new RealmRouter(config);
         tokenCache = new TokenCache(config, java.time.Clock.systemUTC(), metrics::setTokenCacheSize);
         DiameterTransport transport = createDiameterTransport(config);
         GatewayResilience resilience = GatewayResilience.fromConfig(config);
+        jmx.register(metrics, resilience);
         DiameterTransport resilientTransport =
                 new ResilientDiameterTransport(transport, resilience.hssBreaker());
         shClient = new ShClient(config, resilientTransport, metrics);
@@ -92,7 +99,8 @@ public class PushNotificationServlet extends SipServlet {
 
         workerPool = new AsyncWorkerPool(config, metrics);
         cleanupPool = new AsyncWorkerPool(config, metrics);
-        processor = new RingingProcessor(tokenCache, shClient, apnsClient, fcmClient, metrics, cleanupPool);
+        processor = new RingingProcessor(
+                tokenCache, shClient, apnsClient, fcmClient, metrics, cleanupPool, tracing);
 
         evictor = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "token-cache-evictor");
@@ -185,6 +193,9 @@ public class PushNotificationServlet extends SipServlet {
         }
         if (shClient != null) {
             shClient.close();
+        }
+        if (jmx != null) {
+            jmx.close();
         }
         super.destroy();
     }
