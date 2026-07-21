@@ -4,6 +4,7 @@ import com.example.sip.cache.TokenCache;
 import com.example.sip.config.GatewayConfig;
 import com.example.sip.diameter.RealmRouter;
 import com.example.sip.diameter.ShClient;
+import com.example.sip.diameter.ShClientApi;
 import com.example.sip.identity.MsisdnNormalizer;
 import com.example.sip.metrics.GatewayMetrics;
 import com.example.sip.model.RingingEvent;
@@ -42,7 +43,7 @@ public class PushNotificationServlet extends SipServlet {
     private AsyncWorkerPool workerPool;
     private AsyncWorkerPool cleanupPool;
     private TokenCache tokenCache;
-    private ShClient shClient;
+    private ShClientApi shClient;
     private RingingProcessor processor;
     private ScheduledExecutorService evictor;
 

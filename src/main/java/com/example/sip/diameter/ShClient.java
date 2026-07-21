@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
  * <p>Stack wiring to jDiameter is intentionally isolated here. UDR/PUR always set
  * {@code Destination-Realm} and omit {@code Destination-Host} when configured.
  */
-public class ShClient implements AutoCloseable {
+public class ShClient implements ShClientApi {
 
     private static final Logger LOG = LoggerFactory.getLogger(ShClient.class);
     private static final Pattern DEVICE_TOKEN = Pattern.compile(

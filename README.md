@@ -65,11 +65,12 @@ Diameter peers/realms: `src/main/resources/jdiameter-config.xml`.
 
 | Area | Status |
 |---|---|
+| Phase 0 — MP Config + test harness | **Done** |
 | SIP 180 extract + enqueue | Scaffolded |
 | MSISDN / anonymous / domain parsing | Implemented + tests |
 | Realm-based Destination-Realm routing | Implemented + tests |
 | Token cache + eviction | Implemented + tests |
 | APNS / FCM HTTP payload + headers | Scaffolded |
-| jDiameter stack send/receive | Stub (`ShClient` TODO) |
-| Resilience4j breakers / rate limits | Dependencies present; wiring TODO |
-| JMX / OTel export | Metrics facade ready; exporter wiring TODO |
+| jDiameter stack send/receive | Stub (`ShClient` TODO) — Phase 1 |
+| Resilience4j breakers / rate limits | Dependencies present; wiring TODO — Phase 3 |
+| JMX / OTel export | Metrics facade ready; exporter wiring TODO — Phase 4 |

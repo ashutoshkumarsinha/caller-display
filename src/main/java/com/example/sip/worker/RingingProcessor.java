@@ -1,13 +1,11 @@
 package com.example.sip.worker;
 
 import com.example.sip.cache.TokenCache;
-import com.example.sip.diameter.ShClient;
+import com.example.sip.diameter.ShClientApi;
 import com.example.sip.metrics.GatewayMetrics;
 import com.example.sip.model.PushPlatform;
 import com.example.sip.model.PushTokenRecord;
 import com.example.sip.model.RingingEvent;
-import com.example.sip.push.ApnsClient;
-import com.example.sip.push.FcmClient;
 import com.example.sip.push.PushClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,17 +20,17 @@ public final class RingingProcessor {
     private static final Logger LOG = LoggerFactory.getLogger(RingingProcessor.class);
 
     private final TokenCache tokenCache;
-    private final ShClient shClient;
-    private final ApnsClient apnsClient;
-    private final FcmClient fcmClient;
+    private final ShClientApi shClient;
+    private final PushClient apnsClient;
+    private final PushClient fcmClient;
     private final GatewayMetrics metrics;
     private final AsyncWorkerPool cleanupPool;
 
     public RingingProcessor(
             TokenCache tokenCache,
-            ShClient shClient,
-            ApnsClient apnsClient,
-            FcmClient fcmClient,
+            ShClientApi shClient,
+            PushClient apnsClient,
+            PushClient fcmClient,
             GatewayMetrics metrics,
             AsyncWorkerPool cleanupPool) {
         this.tokenCache = tokenCache;

@@ -21,9 +21,22 @@ public final class AsyncWorkerPool implements AutoCloseable {
 
     private final ThreadPoolExecutor executor;
     private final GatewayMetrics metrics;
+    private final boolean sameThread;
 
     public AsyncWorkerPool(GatewayConfig config, GatewayMetrics metrics) {
+        this(config, metrics, false);
+    }
+
+    /**
+     * @param sameThread when true, {@link #execute(Runnable)} runs on the caller (for deterministic tests)
+     */
+    public AsyncWorkerPool(GatewayConfig config, GatewayMetrics metrics, boolean sameThread) {
         this.metrics = metrics;
+        this.sameThread = sameThread;
+        if (sameThread) {
+            this.executor = null;
+            return;
+        }
         LinkedBlockingQueue<Runnable> queue = new LinkedBlockingQueue<>(config.workerQueueCapacity());
         RejectedExecutionHandler rejection = "DISCARD_OLDEST".equalsIgnoreCase(config.workerQueueDropPolicy())
                 ? new ThreadPoolExecutor.DiscardOldestPolicy() {
@@ -60,7 +73,15 @@ public final class AsyncWorkerPool implements AutoCloseable {
                 rejection);
     }
 
+    public static AsyncWorkerPool sameThread(GatewayConfig config, GatewayMetrics metrics) {
+        return new AsyncWorkerPool(config, metrics, true);
+    }
+
     public void execute(Runnable task) {
+        if (sameThread) {
+            task.run();
+            return;
+        }
         metrics.setWorkerQueueDepth(executor.getQueue().size());
         executor.execute(() -> {
             try {
@@ -73,6 +94,9 @@ public final class AsyncWorkerPool implements AutoCloseable {
 
     @Override
     public void close() {
+        if (executor == null) {
+            return;
+        }
         executor.shutdown();
         try {
             if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {

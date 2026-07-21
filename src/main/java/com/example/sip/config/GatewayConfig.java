@@ -1,5 +1,8 @@
 package com.example.sip.config;
 
+import org.eclipse.microprofile.config.Config;
+import org.eclipse.microprofile.config.ConfigProvider;
+
 import java.time.Duration;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -7,7 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Immutable gateway settings loaded from MicroProfile Config / system properties.
+ * Immutable gateway settings loaded from MicroProfile Config.
  */
 public final class GatewayConfig {
 
@@ -77,44 +80,73 @@ public final class GatewayConfig {
         this.fcmFailureRateThreshold = b.fcmFailureRateThreshold;
     }
 
+    /**
+     * Loads from the current MicroProfile {@link ConfigProvider} (Liberty MP Config at runtime).
+     */
     public static GatewayConfig fromEnvironment() {
+        return fromConfig(ConfigProvider.getConfig());
+    }
+
+    /**
+     * Loads from an explicit MicroProfile {@link Config} (preferred in tests).
+     */
+    public static GatewayConfig fromConfig(Config config) {
+        Objects.requireNonNull(config, "config");
         return builder()
-                .defaultCountryCode(env("gateway.msisdn.default-country-code", "1"))
-                .stripTrunkPrefix(Boolean.parseBoolean(env("gateway.msisdn.strip-trunk-prefix", "true")))
-                .trunkPrefix(env("gateway.msisdn.trunk-prefix", "0"))
-                .defaultDestinationRealm(env(
+                .defaultCountryCode(get(config, "gateway.msisdn.default-country-code", "1"))
+                .stripTrunkPrefix(Boolean.parseBoolean(
+                        get(config, "gateway.msisdn.strip-trunk-prefix", "true")))
+                .trunkPrefix(get(config, "gateway.msisdn.trunk-prefix", "0"))
+                .defaultDestinationRealm(get(
+                        config,
                         "gateway.diameter.default-destination-realm",
                         "ims.mnc001.mcc001.3gppnetwork.org"))
-                .preferSipUriRealm(Boolean.parseBoolean(env("gateway.diameter.prefer-sip-uri-realm", "true")))
-                .omitDestinationHost(Boolean.parseBoolean(env("gateway.diameter.omit-destination-host", "true")))
-                .realmPrefixMap(parseMap(env("gateway.diameter.realm-prefix-map", "")))
-                .realmPlmnMap(parseMap(env("gateway.diameter.realm-plmn-map", "")))
-                .serviceIndication(env("gateway.diameter.service-indication", "PushNotificationAppV1"))
+                .preferSipUriRealm(Boolean.parseBoolean(
+                        get(config, "gateway.diameter.prefer-sip-uri-realm", "true")))
+                .omitDestinationHost(Boolean.parseBoolean(
+                        get(config, "gateway.diameter.omit-destination-host", "true")))
+                .realmPrefixMap(parseMap(get(config, "gateway.diameter.realm-prefix-map", "")))
+                .realmPlmnMap(parseMap(get(config, "gateway.diameter.realm-plmn-map", "")))
+                .serviceIndication(get(config, "gateway.diameter.service-indication", "PushNotificationAppV1"))
                 .diameterMessageTimeout(Duration.ofMillis(Long.parseLong(
-                        env("gateway.diameter.message-timeout-ms", "1500"))))
-                .apnsUrl(env("gateway.push.apns.url", "https://api.push.apple.com"))
-                .fcmUrl(env("gateway.push.fcm.url", "https://fcm.googleapis.com/v1/projects/demo/messages:send"))
-                .apnsTopic(env("gateway.push.apns.topic", "com.example.app.voip"))
-                .apnsPushType(env("gateway.push.apns.push-type", "voip"))
-                .apnsPriority(env("gateway.push.apns.priority", "10"))
-                .pushHttpTimeout(Duration.ofMillis(Long.parseLong(env("gateway.push.http-timeout-ms", "3000"))))
-                .apnsBearer(env("gateway.push.apns.bearer", env("APNS_BEARER", "")))
-                .fcmBearer(env("gateway.push.fcm.bearer", env("FCM_BEARER", "")))
-                .cacheMaxEntries(Integer.parseInt(env("gateway.cache.token.max-entries", "100000")))
-                .cacheTtl(Duration.ofSeconds(Long.parseLong(env("gateway.cache.token.ttl-seconds", "300"))))
-                .cacheIdleEvict(Duration.ofSeconds(Long.parseLong(env("gateway.cache.token.idle-evict-seconds", "120"))))
+                        get(config, "gateway.diameter.message-timeout-ms", "1500"))))
+                .apnsUrl(get(config, "gateway.push.apns.url", "https://api.push.apple.com"))
+                .fcmUrl(get(
+                        config,
+                        "gateway.push.fcm.url",
+                        "https://fcm.googleapis.com/v1/projects/demo/messages:send"))
+                .apnsTopic(get(config, "gateway.push.apns.topic", "com.example.app.voip"))
+                .apnsPushType(get(config, "gateway.push.apns.push-type", "voip"))
+                .apnsPriority(get(config, "gateway.push.apns.priority", "10"))
+                .pushHttpTimeout(Duration.ofMillis(Long.parseLong(
+                        get(config, "gateway.push.http-timeout-ms", "3000"))))
+                .apnsBearer(firstNonBlank(
+                        get(config, "gateway.push.apns.bearer", ""),
+                        get(config, "APNS_BEARER", "")))
+                .fcmBearer(firstNonBlank(
+                        get(config, "gateway.push.fcm.bearer", ""),
+                        get(config, "FCM_BEARER", "")))
+                .cacheMaxEntries(Integer.parseInt(get(config, "gateway.cache.token.max-entries", "100000")))
+                .cacheTtl(Duration.ofSeconds(Long.parseLong(
+                        get(config, "gateway.cache.token.ttl-seconds", "300"))))
+                .cacheIdleEvict(Duration.ofSeconds(Long.parseLong(
+                        get(config, "gateway.cache.token.idle-evict-seconds", "120"))))
                 .cacheEvictorInterval(Duration.ofSeconds(Long.parseLong(
-                        env("gateway.cache.evictor.interval-seconds", "60"))))
-                .workerCorePoolSize(Integer.parseInt(env("gateway.worker.core-pool-size", "32")))
-                .workerMaxPoolSize(Integer.parseInt(env("gateway.worker.max-pool-size", "128")))
-                .workerQueueCapacity(Integer.parseInt(env("gateway.worker.queue-capacity", "2000")))
-                .workerQueueDropPolicy(env("gateway.worker.queue-drop-policy", "DISCARD_OLDEST"))
-                .pushRateLimitPerSecond(Integer.parseInt(env("gateway.push.rate-limit.per-second", "500")))
-                .hssFailureRateThreshold(Float.parseFloat(env("gateway.cb.hss.failure-rate-threshold", "5")))
+                        get(config, "gateway.cache.evictor.interval-seconds", "60"))))
+                .workerCorePoolSize(Integer.parseInt(get(config, "gateway.worker.core-pool-size", "32")))
+                .workerMaxPoolSize(Integer.parseInt(get(config, "gateway.worker.max-pool-size", "128")))
+                .workerQueueCapacity(Integer.parseInt(get(config, "gateway.worker.queue-capacity", "2000")))
+                .workerQueueDropPolicy(get(config, "gateway.worker.queue-drop-policy", "DISCARD_OLDEST"))
+                .pushRateLimitPerSecond(Integer.parseInt(
+                        get(config, "gateway.push.rate-limit.per-second", "500")))
+                .hssFailureRateThreshold(Float.parseFloat(
+                        get(config, "gateway.cb.hss.failure-rate-threshold", "5")))
                 .hssSlidingWindow(Duration.ofSeconds(Long.parseLong(
-                        env("gateway.cb.hss.sliding-window-seconds", "10"))))
-                .apnsFailureRateThreshold(Float.parseFloat(env("gateway.cb.apns.failure-rate-threshold", "10")))
-                .fcmFailureRateThreshold(Float.parseFloat(env("gateway.cb.fcm.failure-rate-threshold", "10")))
+                        get(config, "gateway.cb.hss.sliding-window-seconds", "10"))))
+                .apnsFailureRateThreshold(Float.parseFloat(
+                        get(config, "gateway.cb.apns.failure-rate-threshold", "10")))
+                .fcmFailureRateThreshold(Float.parseFloat(
+                        get(config, "gateway.cb.fcm.failure-rate-threshold", "10")))
                 .build();
     }
 
@@ -122,15 +154,17 @@ public final class GatewayConfig {
         return new Builder();
     }
 
-    private static String env(String key, String defaultValue) {
-        String value = System.getProperty(key);
-        if (value == null || value.isBlank()) {
-            value = System.getenv(key.replace('.', '_').toUpperCase());
+    private static String get(Config config, String key, String defaultValue) {
+        return config.getOptionalValue(key, String.class)
+                .filter(v -> !v.isBlank())
+                .orElse(defaultValue);
+    }
+
+    private static String firstNonBlank(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) {
+            return primary;
         }
-        if (value == null || value.isBlank()) {
-            return defaultValue;
-        }
-        return value;
+        return fallback == null ? "" : fallback;
     }
 
     static Map<String, String> parseMap(String raw) {

@@ -7,7 +7,7 @@ Phased plan to take the scaffolded SIP HTTP Push Gateway from stubs to a carrier
 ```
 Phase 0 ──► Phase 1 ──► Phase 2 ──► Phase 3 ──► Phase 4 ──► Phase 5 ──► Phase 6
  Hardening   Diameter    Push I/O    Resilience  Observe     Security    HA / Ops
- (done+)     Sh UDR/PUR  end-to-end  & limits    metrics     & secrets   scale
+ ✅ done     Sh UDR/PUR  end-to-end  & limits    metrics     & secrets   scale
 ```
 
 ---
@@ -52,13 +52,13 @@ Package tests next to code under `src/test/java/com/example/sip/…`. Name tests
 
 ### TDD workflow by phase
 
-#### Phase 0 — Config & harness
+#### Phase 0 — Config & harness ✅
 
-| Order | RED test first | Then implement |
-|---|---|---|
-| T0.1 | `GatewayConfig` loads `gateway.diameter.default-destination-realm` from MP Config / test `microprofile-config.properties` | ConfigProvider / `@Inject` adapter |
-| T0.2 | `FakeShClient` returns canned `PushTokenRecord` for a callee | Test double API used by processor tests |
-| T0.3 | `RecordingPushClient` stores last JSON body and `platform` field | Shared push contract helper |
+| Order | RED test first | Then implement | Status |
+|---|---|---|---|
+| T0.1 | `GatewayConfig` loads `gateway.diameter.default-destination-realm` from MP Config / test properties | `fromConfig` / `ConfigProvider` adapter | **Done** |
+| T0.2 | `FakeShClient` returns canned `PushTokenRecord` for a callee | Test double API used by processor tests | **Done** |
+| T0.3 | `RecordingPushClient` stores last JSON body and `platform` field | Shared push contract helper | **Done** |
 
 #### Phase 1 — Diameter (write tests before jDiameter wiring)
 
@@ -150,7 +150,7 @@ REFACTOR: extract AvpEncoder; keep tests green
 
 ---
 
-## Phase 0 — Scaffold hardening *(mostly done)*
+## Phase 0 — Scaffold hardening *(complete)*
 
 Finish the foundation so later phases plug in cleanly.
 
@@ -161,10 +161,12 @@ Finish the foundation so later phases plug in cleanly.
 | 0.3 | `RealmRouter` + tests | Done | Prefix → SIP domain → default |
 | 0.4 | `TokenCache` + evictor + tests | Done | LRU / TTL / idle |
 | 0.5 | Servlet handoff &lt; 5 ms path | Done | Extract + enqueue only |
-| 0.6 | MicroProfile `Config` injection | **Todo** | Replace `System.getProperty`/`getenv` with `@Inject Config` / `ConfigProvider` |
-| 0.7 | Integration-test harness skeleton | **Todo** | Testcontainers or embedded fixtures for SIP/HTTP later |
+| 0.6 | MicroProfile `Config` injection | **Done** | `GatewayConfig.fromConfig` / `fromEnvironment` via `ConfigProvider` |
+| 0.7 | Integration-test harness skeleton | **Done** | `FakeShClient`, `RecordingPushClient`, `RingingEventFixtures`, `TestConfigs` |
 
-**Exit criteria:** `mvn test` green; config readable from MP sources on Liberty; clear package boundaries unchanged.
+**TDD (Phase 0):** T0.1–T0.3 done — see `GatewayConfigMpTest`, `FakeShClientTest`, `RecordingPushClientTest`, `RingingProcessorHarnessTest`.
+
+**Exit criteria:** `mvn test` green; config readable from MP sources on Liberty; clear package boundaries unchanged. ✅
 
 ---
 
