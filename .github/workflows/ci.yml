@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Unit / component tests (includes T6 SIP budget + chaos gates)
+        run: mvn -B test
+      - name: Package WAR
+        run: mvn -B -DskipTests package
+      - name: Deployment checklist (static)
+        run: bash ops/deploy/checklist.sh
+      - name: Upload WAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SipHttpPushGateway
+          path: target/*.war
+          if-no-files-found: error

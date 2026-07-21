@@ -33,6 +33,9 @@ public final class GatewayMetrics {
     private final ConcurrentMap<String, AtomicLong> realmNoPeer = new ConcurrentHashMap<>();
     private final AtomicLong hssLookupSamples = new AtomicLong();
     private final AtomicLong hssLookupTotalNanos = new AtomicLong();
+    private final AtomicLong sipHandlerSamples = new AtomicLong();
+    private final AtomicLong sipHandlerTotalNanos = new AtomicLong();
+    private final AtomicLong sipHandlerMaxNanos = new AtomicLong();
     private volatile GatewayJmxRegistrar jmx;
 
     public GatewayMetrics() {
@@ -142,6 +145,17 @@ public final class GatewayMetrics {
                 .record(nanos, TimeUnit.NANOSECONDS);
     }
 
+    /** SIP-thread extract + enqueue latency (spec §12 budget: &lt; 5 ms). */
+    public void recordSipHandler(Duration duration) {
+        long nanos = duration.toNanos();
+        sipHandlerSamples.incrementAndGet();
+        sipHandlerTotalNanos.addAndGet(nanos);
+        sipHandlerMaxNanos.accumulateAndGet(nanos, Math::max);
+        Timer.builder("sip_handler_latency_seconds")
+                .register(registry)
+                .record(nanos, TimeUnit.NANOSECONDS);
+    }
+
     public long hssLookupCount() {
         return hssLookupSamples.get();
     }
@@ -152,6 +166,22 @@ public final class GatewayMetrics {
             return 0d;
         }
         return (hssLookupTotalNanos.get() / (double) samples) / 1_000_000d;
+    }
+
+    public long sipHandlerCount() {
+        return sipHandlerSamples.get();
+    }
+
+    public double sipHandlerMeanMillis() {
+        long samples = sipHandlerSamples.get();
+        if (samples == 0) {
+            return 0d;
+        }
+        return (sipHandlerTotalNanos.get() / (double) samples) / 1_000_000d;
+    }
+
+    public double sipHandlerMaxMillis() {
+        return sipHandlerMaxNanos.get() / 1_000_000d;
     }
 
     public long sipRingingIntercepts() {

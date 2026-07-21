@@ -30,6 +30,17 @@
     },
     {
       "type": "timeseries",
+      "title": "SIP handler latency p99",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(sip_handler_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
       "title": "Push success by platform",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "targets": [
@@ -42,7 +53,7 @@
     {
       "type": "timeseries",
       "title": "Push errors by platform/code",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
       "targets": [
         {
           "expr": "rate(push_delivery_errors_total[1m])",
@@ -53,7 +64,7 @@
     {
       "type": "gauge",
       "title": "Worker queue depth",
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "gridPos": { "h": 8, "w": 8, "x": 12, "y": 16 },
       "targets": [
         {
           "expr": "worker_pool_queue_depth",
@@ -75,7 +86,7 @@
     {
       "type": "stat",
       "title": "Token cache size",
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
       "targets": [
         {
           "expr": "token_cache_size",
@@ -86,7 +97,7 @@
     {
       "type": "timeseries",
       "title": "HSS failures / realm no-peer",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 24 },
       "targets": [
         {
           "expr": "rate(hss_lookup_failures_total[1m])",

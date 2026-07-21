@@ -10,7 +10,6 @@ import com.example.sip.diameter.ShClient;
 import com.example.sip.diameter.ShClientApi;
 import com.example.sip.identity.MsisdnNormalizer;
 import com.example.sip.metrics.GatewayMetrics;
-import com.example.sip.model.RingingEvent;
 import com.example.sip.observability.GatewayJmxRegistrar;
 import com.example.sip.observability.GatewayTracing;
 import com.example.sip.push.ApnsClient;
@@ -25,6 +24,7 @@ import com.example.sip.security.PushAuthFactory;
 import com.example.sip.security.TokenRefreshScheduler;
 import com.example.sip.worker.AsyncWorkerPool;
 import com.example.sip.worker.RingingProcessor;
+import com.example.sip.worker.SipRingingHandoff;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,8 +35,6 @@ import javax.servlet.sip.SipServletResponse;
 import java.io.IOException;
 import java.net.http.HttpClient;
 import java.time.Duration;
-import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -50,14 +48,12 @@ public class PushNotificationServlet extends SipServlet {
     private static final Logger LOG = LoggerFactory.getLogger(PushNotificationServlet.class);
 
     private GatewayConfig config;
-    private MsisdnNormalizer normalizer;
-    private RealmRouter realmRouter;
     private GatewayMetrics metrics;
     private AsyncWorkerPool workerPool;
     private AsyncWorkerPool cleanupPool;
     private TokenCache tokenCache;
     private ShClientApi shClient;
-    private RingingProcessor processor;
+    private SipRingingHandoff handoff;
     private ScheduledExecutorService evictor;
     private GatewayJmxRegistrar jmx;
     private GatewayTracing tracing;
@@ -70,8 +66,8 @@ public class PushNotificationServlet extends SipServlet {
         metrics = new GatewayMetrics();
         tracing = new GatewayTracing();
         jmx = new GatewayJmxRegistrar();
-        normalizer = new MsisdnNormalizer(config);
-        realmRouter = new RealmRouter(config);
+        MsisdnNormalizer normalizer = new MsisdnNormalizer(config);
+        RealmRouter realmRouter = new RealmRouter(config);
         tokenCache = new TokenCache(config, java.time.Clock.systemUTC(), metrics::setTokenCacheSize);
         DiameterTransport transport = createDiameterTransport(config);
         GatewayResilience resilience = GatewayResilience.fromConfig(config);
@@ -117,8 +113,13 @@ public class PushNotificationServlet extends SipServlet {
 
         workerPool = new AsyncWorkerPool(config, metrics);
         cleanupPool = new AsyncWorkerPool(config, metrics);
-        processor = new RingingProcessor(
+        RingingProcessor processor = new RingingProcessor(
                 tokenCache, shClient, apnsClient, fcmClient, metrics, cleanupPool, tracing);
+        handoff = new SipRingingHandoff(
+                normalizer,
+                realmRouter,
+                metrics,
+                event -> workerPool.execute(() -> processor.process(event)));
 
         evictor = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "token-cache-evictor");
@@ -149,8 +150,11 @@ public class PushNotificationServlet extends SipServlet {
         try {
             if (response.getStatus() == SipServletResponse.SC_RINGING
                     && "INVITE".equalsIgnoreCase(response.getMethod())) {
-                metrics.incrementSipRinging();
-                enqueueRinging(response);
+                handoff.handoff(
+                        response.getCallId(),
+                        header(response, "To"),
+                        header(response, "P-Called-Party-ID"),
+                        header(response, "From"));
             }
         } catch (Exception e) {
             LOG.warn("Failed to enqueue ringing event: {}", e.toString());
@@ -158,36 +162,6 @@ public class PushNotificationServlet extends SipServlet {
             // Never delay IMS signaling for HSS/HTTP work.
             super.doResponse(response);
         }
-    }
-
-    private void enqueueRinging(SipServletResponse response) {
-        String callId = response.getCallId();
-        String toHeader = header(response, "To");
-        String pCalled = header(response, "P-Called-Party-ID");
-        String fromHeader = header(response, "From");
-
-        String calledHeader = (pCalled != null && !pCalled.isBlank()) ? pCalled : toHeader;
-        Optional<String> calleeMsisdn = normalizer.extractMsisdn(calledHeader);
-        if (calleeMsisdn.isEmpty()) {
-            LOG.warn("Unable to extract callee MSISDN callId={} header={}", callId, calledHeader);
-            return;
-        }
-
-        Optional<String> domain = normalizer.extractDomain(calledHeader);
-        String destinationRealm = realmRouter.resolve(calleeMsisdn.get(), domain);
-        String callerDisplay = normalizer.resolveCallerDisplay(fromHeader);
-        Optional<String> callerMsisdn = normalizer.extractMsisdn(fromHeader);
-
-        RingingEvent event = new RingingEvent(
-                callId,
-                callerDisplay,
-                callerMsisdn.orElse(null),
-                calleeMsisdn.get(),
-                normalizer.extractUri(calledHeader).orElse(null),
-                destinationRealm,
-                UUID.randomUUID().toString());
-
-        workerPool.execute(() -> processor.process(event));
     }
 
     private static String header(SipServletResponse response, String name) {

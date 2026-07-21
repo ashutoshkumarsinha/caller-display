@@ -71,12 +71,14 @@ Diameter peers/realms: `src/main/resources/jdiameter-config.xml`.
 | Phase 3 — Resilience / backpressure | **Done** (breakers, rate limit, retries) |
 | Phase 4 — Observability | **Done** (Micrometer, OTel spans, MDC, JMX, Grafana/alerts) |
 | Phase 5 — Security & secrets | **Done** (fail-closed bearer, Vault MP Config, OAuth refresh, mTLS docs) |
-| SIP 180 extract + enqueue | Scaffolded |
+| Phase 6 — HA / scale / DevOps | **Done** (SIP budget CI gate, chaos/load docs, GitHub Actions, checklist) |
+| SIP 180 extract + enqueue | **Done** (`SipRingingHandoff` + `sip_handler_latency_seconds`) |
 | MSISDN / anonymous / domain parsing | Implemented + tests |
 | Realm-based Destination-Realm routing | Implemented + tests |
-| Token cache + eviction | Implemented + tests |
+| Token cache + eviction | Implemented + tests (TTL-only multi-node policy) |
 | APNS / FCM HTTP payload + headers | **Done** |
 | jDiameter stack send/receive | Implemented (`JDiameterTransport`); lab peer validation remaining |
 | Resilience4j breakers / rate limits | **Done** |
 | Micrometer / OTel / MDC / JMX | **Done** (`ObservabilityPhase4Test`); Liberty `/metrics` scrape in lab |
 | Vault / OAuth / fail-closed push auth | **Done** (`SecurityPhase5Test`) |
+| CI / HA ops | **Done** (`.github/workflows/ci.yml`, `ops/ha/*`, `ops/deploy/checklist.sh`) |

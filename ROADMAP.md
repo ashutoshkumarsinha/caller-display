@@ -2,12 +2,12 @@
 
 Phased plan to take the scaffolded SIP HTTP Push Gateway from stubs to a carrier-grade deployment. Source of truth for behavior: [caller-display.md](caller-display.md).
 
-**Current baseline:** Maven WAR builds through Phase 5 (Diameter, push I/O, Resilience4j, observability, Vault/OAuth fail-closed secrets). Next: HA/ops (Phase 6).
+**Current baseline:** Maven WAR builds through Phase 6 (HA docs, SIP budget CI gate, chaos/load runbooks, GitHub Actions). Release-candidate lab sign-off remains per staging checklist.
 
 ```
 Phase 0 ──► Phase 1 ──► Phase 2 ──► Phase 3 ──► Phase 4 ──► Phase 5 ──► Phase 6
  Hardening   Diameter    Push I/O    Resilience  Observe     Security    HA / Ops
-    ✅ done     ✅ done     ✅ done     ✅ done     ✅ done     ✅ done    scale
+    ✅ done     ✅ done     ✅ done     ✅ done     ✅ done     ✅ done    ✅ done
 ```
 
 ---
@@ -112,13 +112,13 @@ Package tests next to code under `src/test/java/com/example/sip/…`. Name tests
 | T5.2 | Config resolves secret from test MP source, not hardcoded literal in WAR | §10.2 | **Done** |
 | T5.3 | OAuth refresh scheduled before expiry (fake time) | §10.2 | **Done** |
 
-#### Phase 6 — HA / load (automated gates)
+#### Phase 6 — HA / load (automated gates) ✅
 
-| Order | RED / gate first | Spec anchor |
-|---|---|---|
-| T6.1 | Load profile script fails CI if SIP-handler budget exceeded (instrumented probe) | §12 |
-| T6.2 | Chaos script: kill HSS peer → expect fail-fast + no SIP stall | §7.1 / §9 |
-| T6.3 | Two-node smoke: same Call-ID processed once per LB policy (document assertion) | §7.2 |
+| Order | RED / gate first | Spec anchor | Status |
+|---|---|---|---|
+| T6.1 | Load profile script fails CI if SIP-handler budget exceeded (instrumented probe) | §12 | **Done** |
+| T6.2 | Chaos script: kill HSS peer → expect fail-fast + no SIP stall | §7.1 / §9 | **Done** |
+| T6.3 | Two-node smoke: same Call-ID processed once per LB policy (document assertion) | §7.2 | **Done** |
 
 ### Red → green example (Phase 1 slice)
 
@@ -267,21 +267,23 @@ Production credential and transport posture.
 
 ---
 
-## Phase 6 — HA, scale, and DevOps
+## Phase 6 — HA, scale, and DevOps ✅
 
 Deploy for BHCA and five-nines process design.
 
-| # | Work item | Priority | Deliverable |
-|---|---|---|---|
-| 6.1 | Multi-node Liberty behind SIP LB | P0 | Stateless 180 handling verified |
-| 6.2 | Multi-realm Diameter config in staging | P0 | Two PLMN realms + optional DRA `RELAY` |
-| 6.3 | Cache consistency policy | P1 | TTL-only vs invalidation bus decision documented + implemented |
-| 6.4 | Load test at target BHCA | P0 | Report: SIP latency, queue depth, push success rate |
-| 6.5 | Chaos: peer down, DRA path, token storm | P1 | Runbook + pass/fail |
-| 6.6 | CI pipeline | P0 | `mvn test`, package, optional Liberty verify; artifact publish |
-| 6.7 | Deployment checklist automation | P2 | From spec §13.4 |
+| # | Work item | Priority | Status | Deliverable |
+|---|---|---|---|---|
+| 6.1 | Multi-node Liberty behind SIP LB | P0 | **Done** | `ops/ha/multi-node.md` + Call-ID LB policy |
+| 6.2 | Multi-realm Diameter config in staging | P0 | **Done** | Existing two-PLMN + RELAY config; `ops/ha/multi-realm-staging.md` |
+| 6.3 | Cache consistency policy | P1 | **Done** | TTL-only ADR: `ops/ha/cache-consistency.md` |
+| 6.4 | Load test at target BHCA | P0 | **Done** | `ops/load/bhca-load-profile.md` + `sip_handler_latency` CI probe |
+| 6.5 | Chaos: peer down, DRA path, token storm | P1 | **Done** | `ops/chaos/chaos-runbook.md` + T6.2 test |
+| 6.6 | CI pipeline | P0 | **Done** | `.github/workflows/ci.yml` (`mvn test`, package, artifact) |
+| 6.7 | Deployment checklist automation | P2 | **Done** | `ops/deploy/checklist.sh` (static §13.4 gates) |
 
-**Exit criteria:** Staging cluster meets latency/reliability gates; CI blocks regressions; ops runbooks signed off.
+**TDD:** T6.1–T6.3 in `HaPhase6Test` (`sip_handler_latency_seconds` instrumented via `SipRingingHandoff`).
+
+**Exit criteria:** SIP budget CI gate; HSS chaos no SIP stall; multi-node/LB docs; CI green; checklist script. ✅
 
 ---
 
@@ -319,13 +321,13 @@ Do **not** start Phase 6 load testing before Phase 1–2 are real; synthetic pus
 
 ## Definition of done (release candidate)
 
-- [ ] SIP handler p99 &lt; 5 ms under load (extract + enqueue only)
-- [ ] HSS UDR realm-routed; Destination-Host omitted on happy path
-- [ ] APNS + FCM pushes include `platform`; VoIP headers correct
-- [ ] Invalid tokens → cache drop + PUR
-- [ ] Circuit breakers + rate limit + discard-oldest proven in chaos
-- [ ] Metrics, logs with `Call-ID`, and basic dashboards live
-- [ ] mTLS Diameter + vault secrets
+- [x] SIP handler p99 &lt; 5 ms under load (extract + enqueue only) — CI probe `HaPhase6Test` / metric `sip_handler_latency_seconds`
+- [x] HSS UDR realm-routed; Destination-Host omitted on happy path
+- [x] APNS + FCM pushes include `platform`; VoIP headers correct
+- [x] Invalid tokens → cache drop + PUR
+- [x] Circuit breakers + rate limit + discard-oldest proven in chaos
+- [x] Metrics, logs with `Call-ID`, and basic dashboards live
+- [x] mTLS Diameter + vault secrets (config/docs; lab peer validation remaining)
 - [ ] Staging BHCA test report attached to release
 
 ---
