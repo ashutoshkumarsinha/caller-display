@@ -7,7 +7,7 @@ Phased plan to take the scaffolded SIP HTTP Push Gateway from stubs to a carrier
 ```
 Phase 0 ──► Phase 1 ──► Phase 2 ──► Phase 3 ──► Phase 4 ──► Phase 5 ──► Phase 6
  Hardening   Diameter    Push I/O    Resilience  Observe     Security    HA / Ops
- ✅ done     ✅ done     end-to-end  & limits    metrics     & secrets   scale
+ ✅ done     ✅ done     ✅ done     & limits    metrics     & secrets   scale
 ```
 
 ---
@@ -73,18 +73,18 @@ Package tests next to code under `src/test/java/com/example/sip/…`. Name tests
 | T1.7 | PUR payload clears token and bumps sequence | §11 | **Done** |
 | T1.8 | Mock HSS: realm A never lands on realm B peer | §4.3 | **Done** |
 
-#### Phase 2 — Push (contract-first)
+#### Phase 2 — Push ✅
 
-| Order | RED test first | Spec anchor |
-|---|---|---|
-| T2.1 | APNS request includes `apns-push-type`, `apns-priority`, `apns-topic`, `apns-id=eventId` | §3.3.1 |
-| T2.2 | APNS & FCM JSON include `"platform": "APNS"|"FCM"` | §3.3 |
-| T2.3 | Alert body uses caller display / Anonymous / Private Number | §3.1.2 |
-| T2.4 | WireMock 200 → `push_delivery_success` path | §3.3 |
-| T2.5 | WireMock 410 / body `BadDeviceToken` → cache invalidate + PUR scheduled | §3.3.3 / §11 |
-| T2.6 | FCM body `UNREGISTERED` → same purge path | §3.3.3 |
-| T2.7 | `401`/`403` → refresh hook invoked; **token not** purged | §3.3.3 |
-| T2.8 | Cache hit skips `FakeShClient.userDataRequest` | §6 |
+| Order | RED test first | Spec anchor | Status |
+|---|---|---|---|
+| T2.1 | APNS request includes `apns-push-type`, `apns-priority`, `apns-topic`, `apns-id=eventId` | §3.3.1 | **Done** |
+| T2.2 | APNS & FCM JSON include `"platform": "APNS"|"FCM"` | §3.3 | **Done** |
+| T2.3 | Alert body uses caller display / Anonymous / Private Number | §3.1.2 | **Done** |
+| T2.4 | WireMock 200 → `push_delivery_success` path | §3.3 | **Done** |
+| T2.5 | WireMock 410 / body `BadDeviceToken` → cache invalidate + PUR scheduled | §3.3.3 / §11 | **Done** |
+| T2.6 | FCM body `UNREGISTERED` → same purge path | §3.3.3 | **Done** |
+| T2.7 | `401`/`403` → refresh hook invoked; **token not** purged | §3.3.3 | **Done** |
+| T2.8 | Cache hit skips `FakeShClient.userDataRequest` | §6 | **Done** |
 
 #### Phase 3 — Resilience (behavior tests before wiring Resilience4j)
 
@@ -192,20 +192,22 @@ Unblock HSS lookups. Everything push-related depends on real UDR answers.
 
 ---
 
-## Phase 2 — Push delivery end-to-end
+## Phase 2 — Push delivery end-to-end *(complete)*
 
 Make ringing events reach devices.
 
-| # | Work item | Priority | Deliverable |
-|---|---|---|---|
-| 2.1 | APNS HTTP/2 client hardening | P0 | `apns-push-type`, priority, topic, `apns-id`; JWT/bearer refresh hook |
-| 2.2 | FCM HTTP v1 client hardening | P0 | OAuth bearer; high priority Android |
-| 2.3 | Platform dispatch in `RingingProcessor` | P0 | Already sketched — verify with live/mock brokers |
-| 2.4 | Token-invalid feedback loop | P0 | APNS 410 / FCM `UNREGISTERED` → cache invalidate → async PUR |
-| 2.5 | WireMock / mock push servers in tests | P1 | Contract tests for success + invalid-token paths |
-| 2.6 | Alert copy edge cases | P2 | Display name, Anonymous, Private Number (mostly done) |
+| # | Work item | Priority | Status | Deliverable |
+|---|---|---|---|---|
+| 2.1 | APNS HTTP/2 client hardening | P0 | **Done** | VoIP headers + `PushPayloadFactory` + bearer refresh |
+| 2.2 | FCM HTTP v1 client hardening | P0 | **Done** | High priority + platform field + bearer refresh |
+| 2.3 | Platform dispatch in `RingingProcessor` | P0 | **Done** | Verified via `RingingProcessorPushIT` |
+| 2.4 | Token-invalid feedback loop | P0 | **Done** | 410 / UNREGISTERED → cache drop → PUR |
+| 2.5 | WireMock / mock push servers in tests | P1 | **Done** | `ApnsClientWireMockTest`, `FcmClientWireMockTest` |
+| 2.6 | Alert copy edge cases | P2 | **Done** | Anonymous / Private Number in payload tests |
 
-**Exit criteria:** Lab SIP 180 → HSS token → APNS and FCM delivery (or verified mock); dead tokens purged from cache and HSS.
+**TDD:** T2.1–T2.8 covered by `PushPayloadFactoryTest`, WireMock client tests, `RingingProcessorPushIT`.
+
+**Exit criteria:** WireMock APNS/FCM delivery; dead tokens purged; 401/403 refresh without purge; cache hit skips UDR. ✅
 
 ---
 

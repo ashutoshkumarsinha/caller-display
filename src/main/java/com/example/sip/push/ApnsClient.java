@@ -4,7 +4,6 @@ import com.example.sip.config.GatewayConfig;
 import com.example.sip.model.PushTokenRecord;
 import com.example.sip.model.RingingEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,10 +11,11 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * APNS HTTP/2 push client (VoIP headers per spec).
+ * APNS HTTP/2 push client (VoIP headers per spec) with bearer refresh on 401/403.
  */
 public final class ApnsClient implements PushClient {
 
@@ -23,73 +23,86 @@ public final class ApnsClient implements PushClient {
 
     private final GatewayConfig config;
     private final HttpClient httpClient;
-    private final ObjectMapper mapper;
+    private final PushPayloadFactory payloads;
+    private final PushAuthTokenProvider auth;
 
     public ApnsClient(GatewayConfig config, HttpClient httpClient, ObjectMapper mapper) {
+        this(config, httpClient, mapper, BearerTokenProvider.of(config.apnsBearer()));
+    }
+
+    public ApnsClient(
+            GatewayConfig config,
+            HttpClient httpClient,
+            ObjectMapper mapper,
+            PushAuthTokenProvider auth) {
         this.config = config;
         this.httpClient = httpClient;
-        this.mapper = mapper;
+        this.payloads = new PushPayloadFactory(mapper);
+        this.auth = auth;
     }
 
     @Override
     public CompletableFuture<PushResult> send(RingingEvent event, PushTokenRecord token) {
+        return sendOnce(event, token).thenCompose(result -> {
+            if (isAuthFailure(result) && auth.refresh()) {
+                LOG.info("APNS auth refreshed; retrying once callId={}", event.callId());
+                return sendOnce(event, token);
+            }
+            return CompletableFuture.completedFuture(result);
+        });
+    }
+
+    private CompletableFuture<PushResult> sendOnce(RingingEvent event, PushTokenRecord token) {
         try {
-            ObjectNode root = mapper.createObjectNode();
-            ObjectNode aps = root.putObject("aps");
-            ObjectNode alert = aps.putObject("alert");
-            alert.put("title", "Incoming Call");
-            alert.put("body", "Receiving call from " + event.callerDisplay());
-            aps.put("badge", 1);
-            aps.put("sound", "default");
-
-            ObjectNode data = root.putObject("aps-data");
-            data.put("eventId", event.eventId());
-            data.put("eventType", "RINGING");
-            data.put("callId", event.callId());
-            data.put("caller", event.callerDisplay());
-            data.put("callee", event.calleeSipUri().orElse(event.calleeMsisdn()));
-            data.put("deviceToken", token.deviceToken());
-            data.put("platform", "APNS");
-
-            String body = mapper.writeValueAsString(root);
-            String pathToken = token.deviceToken();
-            URI uri = URI.create(trimTrailingSlash(config.apnsUrl()) + "/3/device/" + pathToken);
+            String body = payloads.apnsBody(event, token);
+            URI uri = URI.create(trimTrailingSlash(config.apnsUrl()) + "/3/device/" + token.deviceToken());
 
             HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
                     .timeout(config.pushHttpTimeout())
-                    .header("Content-Type", "application/json")
-                    .header("apns-push-type", config.apnsPushType())
-                    .header("apns-priority", config.apnsPriority())
-                    .header("apns-topic", config.apnsTopic())
-                    .header("apns-id", event.eventId())
                     .POST(HttpRequest.BodyPublishers.ofString(body));
 
-            if (config.apnsBearer() != null && !config.apnsBearer().isBlank()) {
-                builder.header("Authorization", "Bearer " + config.apnsBearer());
+            Map<String, String> headers = PushPayloadFactory.apnsHeaders(
+                    config.apnsPushType(),
+                    config.apnsPriority(),
+                    config.apnsTopic(),
+                    event.eventId());
+            headers.forEach(builder::header);
+
+            String bearer = auth.currentToken();
+            if (bearer != null && !bearer.isBlank()) {
+                builder.header("Authorization", "Bearer " + bearer);
             }
 
             return httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString())
-                    .thenApply(response -> {
-                        int code = response.statusCode();
-                        if (code >= 200 && code < 300) {
-                            return PushResult.ok(code);
-                        }
-                        boolean invalid = code == 410
-                                || containsIgnoreCase(response.body(), "BadDeviceToken")
-                                || containsIgnoreCase(response.body(), "Unregistered");
-                        LOG.warn("APNS push failed status={} callId={} body={}",
-                                code, event.callId(), truncate(response.body()));
-                        return PushResult.failure(code, "apns_" + code, invalid);
-                    })
+                    .thenApply(response -> mapResponse(event, response))
                     .exceptionally(ex -> {
                         LOG.warn("APNS push error callId={}: {}", event.callId(), ex.toString());
                         return PushResult.failure(0, "apns_transport", false);
                     });
         } catch (Exception e) {
-            CompletableFuture<PushResult> failed = new CompletableFuture<>();
-            failed.complete(PushResult.failure(0, "apns_build", false));
-            return failed;
+            return CompletableFuture.completedFuture(PushResult.failure(0, "apns_build", false));
         }
+    }
+
+    private PushResult mapResponse(RingingEvent event, HttpResponse<String> response) {
+        int code = response.statusCode();
+        if (code >= 200 && code < 300) {
+            return PushResult.ok(code);
+        }
+        boolean invalid = code == 410
+                || containsIgnoreCase(response.body(), "BadDeviceToken")
+                || containsIgnoreCase(response.body(), "Unregistered");
+        // Auth failures must not purge device tokens (spec §3.3.3).
+        if (code == 401 || code == 403) {
+            invalid = false;
+        }
+        LOG.warn("APNS push failed status={} callId={} body={}",
+                code, event.callId(), truncate(response.body()));
+        return PushResult.failure(code, "apns_" + code, invalid);
+    }
+
+    private static boolean isAuthFailure(PushResult result) {
+        return !result.success() && (result.statusCode() == 401 || result.statusCode() == 403);
     }
 
     private static String trimTrailingSlash(String url) {

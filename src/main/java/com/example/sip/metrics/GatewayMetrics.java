@@ -116,4 +116,14 @@ public final class GatewayMetrics {
         AtomicLong value = realmRoutes.get(realm);
         return value == null ? 0L : value.get();
     }
+
+    public long pushSuccessCount(String platform) {
+        AtomicLong value = pushSuccessByPlatform.get(platform);
+        return value == null ? 0L : value.get();
+    }
+
+    public long pushErrorCount(String platform, String code) {
+        AtomicLong value = pushErrorsByPlatform.get(platform + "|" + code);
+        return value == null ? 0L : value.get();
+    }
 }

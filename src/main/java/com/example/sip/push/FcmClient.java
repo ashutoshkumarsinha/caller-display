@@ -4,7 +4,6 @@ import com.example.sip.config.GatewayConfig;
 import com.example.sip.model.PushTokenRecord;
 import com.example.sip.model.RingingEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,11 +11,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * FCM HTTP v1 push client.
+ * FCM HTTP v1 push client with bearer refresh on 401/403.
  */
 public final class FcmClient implements PushClient {
 
@@ -24,63 +22,76 @@ public final class FcmClient implements PushClient {
 
     private final GatewayConfig config;
     private final HttpClient httpClient;
-    private final ObjectMapper mapper;
+    private final PushPayloadFactory payloads;
+    private final PushAuthTokenProvider auth;
 
     public FcmClient(GatewayConfig config, HttpClient httpClient, ObjectMapper mapper) {
+        this(config, httpClient, mapper, BearerTokenProvider.of(config.fcmBearer()));
+    }
+
+    public FcmClient(
+            GatewayConfig config,
+            HttpClient httpClient,
+            ObjectMapper mapper,
+            PushAuthTokenProvider auth) {
         this.config = config;
         this.httpClient = httpClient;
-        this.mapper = mapper;
+        this.payloads = new PushPayloadFactory(mapper);
+        this.auth = auth;
     }
 
     @Override
     public CompletableFuture<PushResult> send(RingingEvent event, PushTokenRecord token) {
+        return sendOnce(event, token).thenCompose(result -> {
+            if (isAuthFailure(result) && auth.refresh()) {
+                LOG.info("FCM auth refreshed; retrying once callId={}", event.callId());
+                return sendOnce(event, token);
+            }
+            return CompletableFuture.completedFuture(result);
+        });
+    }
+
+    private CompletableFuture<PushResult> sendOnce(RingingEvent event, PushTokenRecord token) {
         try {
-            ObjectNode root = mapper.createObjectNode();
-            ObjectNode message = root.putObject("message");
-            message.put("token", token.deviceToken());
-            message.putObject("android").put("priority", "high");
-
-            ObjectNode data = message.putObject("data");
-            data.put("eventId", event.eventId());
-            data.put("timestamp", Instant.now().toString());
-            data.put("eventType", "RINGING");
-            data.put("callId", event.callId());
-            data.put("caller", event.callerDisplay());
-            data.put("callee", event.calleeSipUri().orElse(event.calleeMsisdn()));
-            data.put("alertMessage", "Receiving call from " + event.callerDisplay());
-            data.put("platform", "FCM");
-
-            String body = mapper.writeValueAsString(root);
+            String body = payloads.fcmBody(event, token);
             HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(config.fcmUrl()))
                     .timeout(config.pushHttpTimeout())
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body));
 
-            if (config.fcmBearer() != null && !config.fcmBearer().isBlank()) {
-                builder.header("Authorization", "Bearer " + config.fcmBearer());
+            String bearer = auth.currentToken();
+            if (bearer != null && !bearer.isBlank()) {
+                builder.header("Authorization", "Bearer " + bearer);
             }
 
             return httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString())
-                    .thenApply(response -> {
-                        int code = response.statusCode();
-                        if (code >= 200 && code < 300) {
-                            return PushResult.ok(code);
-                        }
-                        boolean invalid = containsIgnoreCase(response.body(), "UNREGISTERED")
-                                || containsIgnoreCase(response.body(), "INVALID_ARGUMENT");
-                        LOG.warn("FCM push failed status={} callId={} body={}",
-                                code, event.callId(), truncate(response.body()));
-                        return PushResult.failure(code, "fcm_" + code, invalid);
-                    })
+                    .thenApply(response -> mapResponse(event, response))
                     .exceptionally(ex -> {
                         LOG.warn("FCM push error callId={}: {}", event.callId(), ex.toString());
                         return PushResult.failure(0, "fcm_transport", false);
                     });
         } catch (Exception e) {
-            CompletableFuture<PushResult> failed = new CompletableFuture<>();
-            failed.complete(PushResult.failure(0, "fcm_build", false));
-            return failed;
+            return CompletableFuture.completedFuture(PushResult.failure(0, "fcm_build", false));
         }
+    }
+
+    private PushResult mapResponse(RingingEvent event, HttpResponse<String> response) {
+        int code = response.statusCode();
+        if (code >= 200 && code < 300) {
+            return PushResult.ok(code);
+        }
+        boolean invalid = containsIgnoreCase(response.body(), "UNREGISTERED")
+                || containsIgnoreCase(response.body(), "INVALID_ARGUMENT");
+        if (code == 401 || code == 403) {
+            invalid = false;
+        }
+        LOG.warn("FCM push failed status={} callId={} body={}",
+                code, event.callId(), truncate(response.body()));
+        return PushResult.failure(code, "fcm_" + code, invalid);
+    }
+
+    private static boolean isAuthFailure(PushResult result) {
+        return !result.success() && (result.statusCode() == 401 || result.statusCode() == 403);
     }
 
     private static boolean containsIgnoreCase(String body, String needle) {
