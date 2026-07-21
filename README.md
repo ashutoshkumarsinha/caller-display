@@ -68,11 +68,12 @@ Diameter peers/realms: `src/main/resources/jdiameter-config.xml`.
 | Phase 0 — MP Config + test harness | **Done** |
 | Phase 1 — Diameter Sh UDR/PUR | **Done** (mock HSS + jDiameter transport) |
 | Phase 2 — APNS/FCM push + purge loop | **Done** (WireMock contracts) |
+| Phase 3 — Resilience / backpressure | **Done** (breakers, rate limit, retries) |
 | SIP 180 extract + enqueue | Scaffolded |
 | MSISDN / anonymous / domain parsing | Implemented + tests |
 | Realm-based Destination-Realm routing | Implemented + tests |
 | Token cache + eviction | Implemented + tests |
 | APNS / FCM HTTP payload + headers | **Done** |
 | jDiameter stack send/receive | Implemented (`JDiameterTransport`); lab peer validation remaining |
-| Resilience4j breakers / rate limits | Dependencies present; wiring TODO — Phase 3 |
+| Resilience4j breakers / rate limits | **Done** |
 | JMX / OTel export | Metrics facade ready; exporter wiring TODO — Phase 4 |

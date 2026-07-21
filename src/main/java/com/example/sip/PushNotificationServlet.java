@@ -13,6 +13,10 @@ import com.example.sip.metrics.GatewayMetrics;
 import com.example.sip.model.RingingEvent;
 import com.example.sip.push.ApnsClient;
 import com.example.sip.push.FcmClient;
+import com.example.sip.push.PushClient;
+import com.example.sip.resilience.GatewayResilience;
+import com.example.sip.resilience.ResilientDiameterTransport;
+import com.example.sip.resilience.ResilientPushClient;
 import com.example.sip.worker.AsyncWorkerPool;
 import com.example.sip.worker.RingingProcessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -59,15 +63,32 @@ public class PushNotificationServlet extends SipServlet {
         realmRouter = new RealmRouter(config);
         tokenCache = new TokenCache(config, java.time.Clock.systemUTC(), metrics::setTokenCacheSize);
         DiameterTransport transport = createDiameterTransport(config);
-        shClient = new ShClient(config, transport, metrics);
+        GatewayResilience resilience = GatewayResilience.fromConfig(config);
+        DiameterTransport resilientTransport =
+                new ResilientDiameterTransport(transport, resilience.hssBreaker());
+        shClient = new ShClient(config, resilientTransport, metrics);
         shClient.start();
 
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(config.pushHttpTimeout())
                 .build();
         ObjectMapper mapper = new ObjectMapper();
-        ApnsClient apnsClient = new ApnsClient(config, httpClient, mapper);
-        FcmClient fcmClient = new FcmClient(config, httpClient, mapper);
+        PushClient apnsClient = new ResilientPushClient(
+                new ApnsClient(config, httpClient, mapper),
+                resilience.apnsBreaker(),
+                resilience.pushRateLimiter(),
+                metrics,
+                "APNS",
+                resilience.pushMaxRetries(),
+                resilience.pushRetryBaseDelay());
+        PushClient fcmClient = new ResilientPushClient(
+                new FcmClient(config, httpClient, mapper),
+                resilience.fcmBreaker(),
+                resilience.pushRateLimiter(),
+                metrics,
+                "FCM",
+                resilience.pushMaxRetries(),
+                resilience.pushRetryBaseDelay());
 
         workerPool = new AsyncWorkerPool(config, metrics);
         cleanupPool = new AsyncWorkerPool(config, metrics);

@@ -7,7 +7,7 @@ Phased plan to take the scaffolded SIP HTTP Push Gateway from stubs to a carrier
 ```
 Phase 0 ──► Phase 1 ──► Phase 2 ──► Phase 3 ──► Phase 4 ──► Phase 5 ──► Phase 6
  Hardening   Diameter    Push I/O    Resilience  Observe     Security    HA / Ops
- ✅ done     ✅ done     ✅ done     & limits    metrics     & secrets   scale
+ ✅ done     ✅ done     ✅ done     ✅ done     metrics     & secrets   scale
 ```
 
 ---
@@ -86,15 +86,15 @@ Package tests next to code under `src/test/java/com/example/sip/…`. Name tests
 | T2.7 | `401`/`403` → refresh hook invoked; **token not** purged | §3.3.3 | **Done** |
 | T2.8 | Cache hit skips `FakeShClient.userDataRequest` | §6 | **Done** |
 
-#### Phase 3 — Resilience (behavior tests before wiring Resilience4j)
+#### Phase 3 — Resilience ✅
 
-| Order | RED test first | Spec anchor |
-|---|---|---|
-| T3.1 | After N HSS failures in window, next call fails fast without calling Diameter | §9.1 |
-| T3.2 | APNS breaker open; FCM path still succeeds | §9.1 |
-| T3.3 | Rate limiter allows ≤ configured pushes/sec under burst | §9.2 |
-| T3.4 | Full worker queue increments drop metric and does not throw to SIP thread | §9.2 |
-| T3.5 | Retry on 503 with jitter; **no** retry on 410 | §3.3.3 / §9 |
+| Order | RED test first | Spec anchor | Status |
+|---|---|---|---|
+| T3.1 | After N HSS failures in window, next call fails fast without calling Diameter | §9.1 | **Done** |
+| T3.2 | APNS breaker open; FCM path still succeeds | §9.1 | **Done** |
+| T3.3 | Rate limiter allows ≤ configured pushes/sec under burst | §9.2 | **Done** |
+| T3.4 | Full worker queue increments drop metric and does not throw to SIP thread | §9.2 | **Done** |
+| T3.5 | Retry on 503 with jitter; **no** retry on 410 | §3.3.3 / §9 | **Done** |
 
 #### Phase 4 — Observability
 
@@ -211,20 +211,22 @@ Make ringing events reach devices.
 
 ---
 
-## Phase 3 — Resilience & backpressure
+## Phase 3 — Resilience & backpressure *(complete)*
 
 Survive HSS/push outages without starving the JVM or IMS.
 
-| # | Work item | Priority | Deliverable |
-|---|---|---|---|
-| 3.1 | Resilience4j circuit breaker on HSS | P0 | Fail-fast when failure rate &gt; threshold |
-| 3.2 | Independent breakers for APNS and FCM | P0 | Apple outage must not trip Google path |
-| 3.3 | Push rate limiter | P0 | `gateway.push.rate-limit.per-second` |
-| 3.4 | Confirm discard-oldest queue behavior | P1 | Metrics on drops; load test |
-| 3.5 | Bounded retries with jitter | P1 | Only for 429/503 — never for 410/UNREGISTERED |
-| 3.6 | Bulkhead between HSS vs push executors | P2 | Optional isolation if one pool saturates |
+| # | Work item | Priority | Status | Deliverable |
+|---|---|---|---|---|
+| 3.1 | Resilience4j circuit breaker on HSS | P0 | **Done** | `ResilientDiameterTransport` |
+| 3.2 | Independent breakers for APNS and FCM | P0 | **Done** | Separate `ResilientPushClient` wrappers |
+| 3.3 | Push rate limiter | P0 | **Done** | Shared `RateLimiter` (`gateway.push.rate-limit.per-second`) |
+| 3.4 | Confirm discard-oldest queue behavior | P1 | **Done** | `AsyncWorkerPoolBackpressureTest` |
+| 3.5 | Bounded retries with jitter | P1 | **Done** | Retry 429/503 only; never 410 |
+| 3.6 | Bulkhead between HSS vs push executors | P2 | Deferred | Optional; separate worker pools already isolate cleanup |
 
-**Exit criteria:** Chaos tests (HSS kill, APNS 503) show SIP path unaffected; queues drop instead of OOM; breakers open/close as configured.
+**TDD:** T3.1–T3.5 in `ResiliencePhase3Test`, `AsyncWorkerPoolBackpressureTest`.
+
+**Exit criteria:** HSS fail-fast when open; APNS outage ≠ FCM; rate limit + queue drops; 503 retries only. ✅
 
 ---
 

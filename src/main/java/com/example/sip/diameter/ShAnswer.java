@@ -15,6 +15,7 @@ public final class ShAnswer {
         REALM_NOT_SERVED,
         NO_PEER,
         TIMEOUT,
+        CIRCUIT_OPEN,
         ERROR
     }
 
@@ -47,6 +48,10 @@ public final class ShAnswer {
 
     public static ShAnswer timeout() {
         return new ShAnswer(Outcome.TIMEOUT, 0L, null, null, "Diameter message timeout");
+    }
+
+    public static ShAnswer circuitOpen() {
+        return new ShAnswer(Outcome.CIRCUIT_OPEN, 0L, null, null, "circuit_open");
     }
 
     public static ShAnswer error(String detail) {
@@ -102,6 +107,7 @@ public final class ShAnswer {
             case REALM_NOT_SERVED -> "realm_not_served";
             case NO_PEER -> "no_peer";
             case TIMEOUT -> "timeout";
+            case CIRCUIT_OPEN -> "circuit_open";
             case ERROR -> "error";
         };
     }
