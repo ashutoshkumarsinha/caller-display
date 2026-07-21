@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Configuration xmlns="http://jdiameter.org">
+    <LocalPeer>
+        <URI>aaas://appserver.ims.mnc001.mcc001.3gppnetwork.org:5658</URI>
+        <IPAddresses><IPAddress value="127.0.0.1"/></IPAddresses>
+        <Realm value="ims.mnc001.mcc001.3gppnetwork.org"/>
+        <VendorID value="0"/>
+    </LocalPeer>
+    <Parameters>
+        <AcceptUndefinedPeer value="false"/>
+        <DuplicateProtection value="true"/>
+        <MessageTimeout value="1500"/>
+        <StopTimeout value="3000"/>
+        <UseUriAsFqdn value="true"/>
+    </Parameters>
+    <Network>
+        <Peers>
+            <Peer name="aaas://hss1.ims.mnc001.mcc001.3gppnetwork.org:5658" attemptConnect="true" rating="1"/>
+            <Peer name="aaas://hss2.ims.mnc001.mcc001.3gppnetwork.org:5658" attemptConnect="true" rating="2"/>
+            <Peer name="aaas://hss1.ims.mnc010.mcc234.3gppnetwork.org:5658" attemptConnect="true" rating="1"/>
+            <Peer name="aaas://hss2.ims.mnc010.mcc234.3gppnetwork.org:5658" attemptConnect="true" rating="2"/>
+            <Peer name="aaas://dra.core.example.net:5658" attemptConnect="true" rating="1"/>
+        </Peers>
+        <Realms>
+            <Realm name="ims.mnc001.mcc001.3gppnetwork.org"
+                   peers="aaas://hss1.ims.mnc001.mcc001.3gppnetwork.org:5658,aaas://hss2.ims.mnc001.mcc001.3gppnetwork.org:5658"
+                   localAction="LOCAL">
+                <ApplicationID>
+                    <VendorId value="10415"/>
+                    <AuthApplicationId value="16777217"/>
+                </ApplicationID>
+            </Realm>
+            <Realm name="ims.mnc010.mcc234.3gppnetwork.org"
+                   peers="aaas://hss1.ims.mnc010.mcc234.3gppnetwork.org:5658,aaas://hss2.ims.mnc010.mcc234.3gppnetwork.org:5658"
+                   localAction="LOCAL">
+                <ApplicationID>
+                    <VendorId value="10415"/>
+                    <AuthApplicationId value="16777217"/>
+                </ApplicationID>
+            </Realm>
+            <Realm name="ims.mnc099.mcc999.3gppnetwork.org"
+                   peers="aaas://dra.core.example.net:5658"
+                   localAction="RELAY">
+                <ApplicationID>
+                    <VendorId value="10415"/>
+                    <AuthApplicationId value="16777217"/>
+                </ApplicationID>
+            </Realm>
+        </Realms>
+    </Network>
+</Configuration>

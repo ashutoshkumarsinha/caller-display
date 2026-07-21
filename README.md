@@ -1,0 +1,73 @@
+# SIP HTTP Push Gateway
+
+Real-time SIP `180 Ringing` → Diameter Sh (HSS) → APNS/FCM push gateway for Open Liberty.
+
+See [caller-display.md](caller-display.md) for the full product and technical specification.
+
+## Layout
+
+```
+src/main/java/com/example/sip/
+├── PushNotificationServlet.java   # SIP 180 intercept + async handoff
+├── config/GatewayConfig.java
+├── identity/MsisdnNormalizer.java
+├── diameter/RealmRouter.java      # Destination-Realm resolution
+├── diameter/ShClient.java         # Sh UDR/PUR (jDiameter wiring TODO)
+├── cache/TokenCache.java
+├── push/ApnsClient.java
+├── push/FcmClient.java
+├── worker/AsyncWorkerPool.java
+├── worker/RingingProcessor.java
+└── metrics/GatewayMetrics.java
+```
+
+## Prerequisites
+
+- JDK 17+
+- Maven 3.9+
+- Open Liberty 25.x (pulled by `liberty-maven-plugin` when used)
+
+## Build & test
+
+```bash
+mvn test
+mvn -DskipTests package
+```
+
+## Run on Open Liberty
+
+```bash
+export KEYSTORE_PASSWORD=changeit
+export APNS_BEARER=...
+export FCM_BEARER=...
+mvn liberty:run
+```
+
+- SIP: `5060` / `5061`
+- HTTP management / metrics: `9080` / `9443`
+- Metrics: `https://localhost:9443/metrics`
+
+## Configuration
+
+Defaults live in `src/main/resources/META-INF/microprofile-config.properties`.
+Override with system properties or environment variables (dots → underscores, uppercased), for example:
+
+```bash
+export GATEWAY_DIAMETER_DEFAULT_DESTINATION_REALM=ims.mnc001.mcc001.3gppnetwork.org
+export GATEWAY_MSISDN_DEFAULT_COUNTRY_CODE=1
+```
+
+Diameter peers/realms: `src/main/resources/jdiameter-config.xml`.
+
+## Implementation status
+
+| Area | Status |
+|---|---|
+| SIP 180 extract + enqueue | Scaffolded |
+| MSISDN / anonymous / domain parsing | Implemented + tests |
+| Realm-based Destination-Realm routing | Implemented + tests |
+| Token cache + eviction | Implemented + tests |
+| APNS / FCM HTTP payload + headers | Scaffolded |
+| jDiameter stack send/receive | Stub (`ShClient` TODO) |
+| Resilience4j breakers / rate limits | Dependencies present; wiring TODO |
+| JMX / OTel export | Metrics facade ready; exporter wiring TODO |
