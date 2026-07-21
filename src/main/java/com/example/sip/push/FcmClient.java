@@ -55,16 +55,19 @@ public final class FcmClient implements PushClient {
 
     private CompletableFuture<PushResult> sendOnce(RingingEvent event, PushTokenRecord token) {
         try {
+            String bearer = resolveBearer();
+            if (bearer == null || bearer.isBlank()) {
+                LOG.warn("FCM push aborted: missing bearer callId={}", event.callId());
+                return CompletableFuture.completedFuture(
+                        PushResult.failure(0, "fcm_missing_bearer", false));
+            }
+
             String body = payloads.fcmBody(event, token);
             HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(config.fcmUrl()))
                     .timeout(config.pushHttpTimeout())
                     .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + bearer)
                     .POST(HttpRequest.BodyPublishers.ofString(body));
-
-            String bearer = auth.currentToken();
-            if (bearer != null && !bearer.isBlank()) {
-                builder.header("Authorization", "Bearer " + bearer);
-            }
 
             Map<String, String> context = CallMdc.copy();
             return httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString())
@@ -88,6 +91,17 @@ public final class FcmClient implements PushClient {
         } catch (Exception e) {
             return CompletableFuture.completedFuture(PushResult.failure(0, "fcm_build", false));
         }
+    }
+
+    private String resolveBearer() {
+        String bearer = auth.currentToken();
+        if (bearer != null && !bearer.isBlank()) {
+            return bearer;
+        }
+        if (auth.refresh()) {
+            return auth.currentToken();
+        }
+        return bearer;
     }
 
     private PushResult mapResponse(RingingEvent event, HttpResponse<String> response) {

@@ -55,6 +55,13 @@ public final class ApnsClient implements PushClient {
 
     private CompletableFuture<PushResult> sendOnce(RingingEvent event, PushTokenRecord token) {
         try {
+            String bearer = resolveBearer();
+            if (bearer == null || bearer.isBlank()) {
+                LOG.warn("APNS push aborted: missing bearer callId={}", event.callId());
+                return CompletableFuture.completedFuture(
+                        PushResult.failure(0, "apns_missing_bearer", false));
+            }
+
             String body = payloads.apnsBody(event, token);
             URI uri = URI.create(trimTrailingSlash(config.apnsUrl()) + "/3/device/" + token.deviceToken());
 
@@ -68,11 +75,7 @@ public final class ApnsClient implements PushClient {
                     config.apnsTopic(),
                     event.eventId());
             headers.forEach(builder::header);
-
-            String bearer = auth.currentToken();
-            if (bearer != null && !bearer.isBlank()) {
-                builder.header("Authorization", "Bearer " + bearer);
-            }
+            builder.header("Authorization", "Bearer " + bearer);
 
             Map<String, String> context = CallMdc.copy();
             return httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString())
@@ -96,6 +99,17 @@ public final class ApnsClient implements PushClient {
         } catch (Exception e) {
             return CompletableFuture.completedFuture(PushResult.failure(0, "apns_build", false));
         }
+    }
+
+    private String resolveBearer() {
+        String bearer = auth.currentToken();
+        if (bearer != null && !bearer.isBlank()) {
+            return bearer;
+        }
+        if (auth.refresh()) {
+            return auth.currentToken();
+        }
+        return bearer;
     }
 
     private PushResult mapResponse(RingingEvent event, HttpResponse<String> response) {

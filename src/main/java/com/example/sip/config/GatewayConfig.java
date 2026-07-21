@@ -32,6 +32,9 @@ public final class GatewayConfig {
     private final Duration pushHttpTimeout;
     private final String apnsBearer;
     private final String fcmBearer;
+    private final boolean oauthRefreshEnabled;
+    private final Duration oauthRefreshSkew;
+    private final Duration oauthAccessTokenTtl;
     private final int cacheMaxEntries;
     private final Duration cacheTtl;
     private final Duration cacheIdleEvict;
@@ -66,6 +69,9 @@ public final class GatewayConfig {
         this.pushHttpTimeout = b.pushHttpTimeout;
         this.apnsBearer = b.apnsBearer;
         this.fcmBearer = b.fcmBearer;
+        this.oauthRefreshEnabled = b.oauthRefreshEnabled;
+        this.oauthRefreshSkew = b.oauthRefreshSkew;
+        this.oauthAccessTokenTtl = b.oauthAccessTokenTtl;
         this.cacheMaxEntries = b.cacheMaxEntries;
         this.cacheTtl = b.cacheTtl;
         this.cacheIdleEvict = b.cacheIdleEvict;
@@ -124,10 +130,18 @@ public final class GatewayConfig {
                         get(config, "gateway.push.http-timeout-ms", "3000"))))
                 .apnsBearer(firstNonBlank(
                         get(config, "gateway.push.apns.bearer", ""),
+                        get(config, "vault.apns.bearer", ""),
                         get(config, "APNS_BEARER", "")))
                 .fcmBearer(firstNonBlank(
                         get(config, "gateway.push.fcm.bearer", ""),
+                        get(config, "vault.fcm.bearer", ""),
                         get(config, "FCM_BEARER", "")))
+                .oauthRefreshEnabled(Boolean.parseBoolean(
+                        get(config, "gateway.push.oauth.refresh-enabled", "true")))
+                .oauthRefreshSkew(Duration.ofSeconds(Long.parseLong(
+                        get(config, "gateway.push.oauth.refresh-skew-seconds", "60"))))
+                .oauthAccessTokenTtl(Duration.ofSeconds(Long.parseLong(
+                        get(config, "gateway.push.oauth.access-token-ttl-seconds", "3600"))))
                 .cacheMaxEntries(Integer.parseInt(get(config, "gateway.cache.token.max-entries", "100000")))
                 .cacheTtl(Duration.ofSeconds(Long.parseLong(
                         get(config, "gateway.cache.token.ttl-seconds", "300"))))
@@ -163,11 +177,13 @@ public final class GatewayConfig {
                 .orElse(defaultValue);
     }
 
-    private static String firstNonBlank(String primary, String fallback) {
-        if (primary != null && !primary.isBlank()) {
-            return primary;
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
         }
-        return fallback == null ? "" : fallback;
+        return "";
     }
 
     static Map<String, String> parseMap(String raw) {
@@ -261,6 +277,21 @@ public final class GatewayConfig {
         return fcmBearer;
     }
 
+    /** When true, push auth uses {@code OauthBearerTokenProvider} with proactive refresh. */
+    public boolean oauthRefreshEnabled() {
+        return oauthRefreshEnabled;
+    }
+
+    /** Refresh this long before access-token expiry (spec §10.2). */
+    public Duration oauthRefreshSkew() {
+        return oauthRefreshSkew;
+    }
+
+    /** Assumed TTL when Vault/env returns a bearer without explicit expiry. */
+    public Duration oauthAccessTokenTtl() {
+        return oauthAccessTokenTtl;
+    }
+
     public int cacheMaxEntries() {
         return cacheMaxEntries;
     }
@@ -337,6 +368,9 @@ public final class GatewayConfig {
         private Duration pushHttpTimeout = Duration.ofSeconds(3);
         private String apnsBearer = "";
         private String fcmBearer = "";
+        private boolean oauthRefreshEnabled = true;
+        private Duration oauthRefreshSkew = Duration.ofSeconds(60);
+        private Duration oauthAccessTokenTtl = Duration.ofSeconds(3600);
         private int cacheMaxEntries = 100_000;
         private Duration cacheTtl = Duration.ofSeconds(300);
         private Duration cacheIdleEvict = Duration.ofSeconds(120);
@@ -439,6 +473,21 @@ public final class GatewayConfig {
 
         public Builder fcmBearer(String value) {
             this.fcmBearer = Objects.requireNonNull(value);
+            return this;
+        }
+
+        public Builder oauthRefreshEnabled(boolean value) {
+            this.oauthRefreshEnabled = value;
+            return this;
+        }
+
+        public Builder oauthRefreshSkew(Duration value) {
+            this.oauthRefreshSkew = Objects.requireNonNull(value);
+            return this;
+        }
+
+        public Builder oauthAccessTokenTtl(Duration value) {
+            this.oauthAccessTokenTtl = Objects.requireNonNull(value);
             return this;
         }
 

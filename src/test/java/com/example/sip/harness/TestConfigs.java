@@ -22,6 +22,7 @@ public final class TestConfigs {
         Properties props = new Properties();
         props.putAll(values);
         return new SmallRyeConfigBuilder()
+                .addDefaultInterceptors()
                 .withSources(new PropertiesConfigSource(props, "test-map", 200))
                 .build();
     }

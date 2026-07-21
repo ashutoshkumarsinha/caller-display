@@ -19,7 +19,8 @@ src/main/java/com/example/sip/
 ├── resilience/…                   # Breakers, rate limit, retries
 ├── worker/AsyncWorkerPool.java / RingingProcessor.java
 ├── metrics/GatewayMetrics.java    # Micrometer bridge
-└── observability/                 # CallMdc, GatewayTracing, JMX
+├── observability/                 # CallMdc, GatewayTracing, JMX
+└── security/                      # OauthBearerTokenProvider, PushAuthFactory
 ```
 
 ## Prerequisites
@@ -69,6 +70,7 @@ Diameter peers/realms: `src/main/resources/jdiameter-config.xml`.
 | Phase 2 — APNS/FCM push + purge loop | **Done** (WireMock contracts) |
 | Phase 3 — Resilience / backpressure | **Done** (breakers, rate limit, retries) |
 | Phase 4 — Observability | **Done** (Micrometer, OTel spans, MDC, JMX, Grafana/alerts) |
+| Phase 5 — Security & secrets | **Done** (fail-closed bearer, Vault MP Config, OAuth refresh, mTLS docs) |
 | SIP 180 extract + enqueue | Scaffolded |
 | MSISDN / anonymous / domain parsing | Implemented + tests |
 | Realm-based Destination-Realm routing | Implemented + tests |
@@ -77,3 +79,4 @@ Diameter peers/realms: `src/main/resources/jdiameter-config.xml`.
 | jDiameter stack send/receive | Implemented (`JDiameterTransport`); lab peer validation remaining |
 | Resilience4j breakers / rate limits | **Done** |
 | Micrometer / OTel / MDC / JMX | **Done** (`ObservabilityPhase4Test`); Liberty `/metrics` scrape in lab |
+| Vault / OAuth / fail-closed push auth | **Done** (`SecurityPhase5Test`) |

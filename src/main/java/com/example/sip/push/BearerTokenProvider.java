@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 /**
- * Mutable bearer holder with optional refresh supplier (Vault/OAuth hook in later phases).
+ * Mutable bearer holder with optional refresh supplier (Vault/OAuth).
  */
 public final class BearerTokenProvider implements PushAuthTokenProvider {
 

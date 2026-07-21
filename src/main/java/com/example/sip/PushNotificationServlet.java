@@ -15,10 +15,14 @@ import com.example.sip.observability.GatewayJmxRegistrar;
 import com.example.sip.observability.GatewayTracing;
 import com.example.sip.push.ApnsClient;
 import com.example.sip.push.FcmClient;
+import com.example.sip.push.PushAuthTokenProvider;
 import com.example.sip.push.PushClient;
 import com.example.sip.resilience.GatewayResilience;
 import com.example.sip.resilience.ResilientDiameterTransport;
 import com.example.sip.resilience.ResilientPushClient;
+import com.example.sip.security.OauthBearerTokenProvider;
+import com.example.sip.security.PushAuthFactory;
+import com.example.sip.security.TokenRefreshScheduler;
 import com.example.sip.worker.AsyncWorkerPool;
 import com.example.sip.worker.RingingProcessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -57,6 +61,7 @@ public class PushNotificationServlet extends SipServlet {
     private ScheduledExecutorService evictor;
     private GatewayJmxRegistrar jmx;
     private GatewayTracing tracing;
+    private TokenRefreshScheduler tokenRefreshScheduler;
 
     @Override
     public void init() throws ServletException {
@@ -80,8 +85,21 @@ public class PushNotificationServlet extends SipServlet {
                 .connectTimeout(config.pushHttpTimeout())
                 .build();
         ObjectMapper mapper = new ObjectMapper();
+        PushAuthTokenProvider apnsAuth = PushAuthFactory.apns(config);
+        PushAuthTokenProvider fcmAuth = PushAuthFactory.fcm(config);
+        if (config.oauthRefreshEnabled()) {
+            tokenRefreshScheduler = new TokenRefreshScheduler(
+                    java.time.Clock.systemUTC(),
+                    Duration.ofSeconds(5));
+            if (apnsAuth instanceof OauthBearerTokenProvider oauth) {
+                tokenRefreshScheduler.watch(oauth);
+            }
+            if (fcmAuth instanceof OauthBearerTokenProvider oauth) {
+                tokenRefreshScheduler.watch(oauth);
+            }
+        }
         PushClient apnsClient = new ResilientPushClient(
-                new ApnsClient(config, httpClient, mapper),
+                new ApnsClient(config, httpClient, mapper, apnsAuth),
                 resilience.apnsBreaker(),
                 resilience.pushRateLimiter(),
                 metrics,
@@ -89,7 +107,7 @@ public class PushNotificationServlet extends SipServlet {
                 resilience.pushMaxRetries(),
                 resilience.pushRetryBaseDelay());
         PushClient fcmClient = new ResilientPushClient(
-                new FcmClient(config, httpClient, mapper),
+                new FcmClient(config, httpClient, mapper, fcmAuth),
                 resilience.fcmBreaker(),
                 resilience.pushRateLimiter(),
                 metrics,
@@ -182,6 +200,9 @@ public class PushNotificationServlet extends SipServlet {
 
     @Override
     public void destroy() {
+        if (tokenRefreshScheduler != null) {
+            tokenRefreshScheduler.close();
+        }
         if (evictor != null) {
             evictor.shutdownNow();
         }

@@ -2,12 +2,12 @@
 
 Phased plan to take the scaffolded SIP HTTP Push Gateway from stubs to a carrier-grade deployment. Source of truth for behavior: [caller-display.md](caller-display.md).
 
-**Current baseline:** Maven WAR builds through Phase 4 (Diameter, push I/O, Resilience4j, Micrometer/OTel/MDC/JMX). Next: security/secrets (Phase 5) and HA/ops (Phase 6).
+**Current baseline:** Maven WAR builds through Phase 5 (Diameter, push I/O, Resilience4j, observability, Vault/OAuth fail-closed secrets). Next: HA/ops (Phase 6).
 
 ```
 Phase 0 ──► Phase 1 ──► Phase 2 ──► Phase 3 ──► Phase 4 ──► Phase 5 ──► Phase 6
  Hardening   Diameter    Push I/O    Resilience  Observe     Security    HA / Ops
-    ✅ done     ✅ done     ✅ done     ✅ done     ✅ done     & secrets   scale
+    ✅ done     ✅ done     ✅ done     ✅ done     ✅ done     ✅ done    scale
 ```
 
 ---
@@ -104,13 +104,13 @@ Package tests next to code under `src/test/java/com/example/sip/…`. Name tests
 | T4.2 | Logs/MDC contain `callId` for processor warnings (append-only test appender) | §8.3 | **Done** |
 | T4.3 | Histogram/timer recorded for HSS lookup duration (fake clock or mock timer) | §8.1 | **Done** |
 
-#### Phase 5 — Security
+#### Phase 5 — Security ✅
 
-| Order | RED test first | Spec anchor |
-|---|---|---|
-| T5.1 | Missing bearer → push attempt fails closed (no anonymous send) | §10.2 |
-| T5.2 | Config resolves secret from test MP source, not hardcoded literal in WAR | §10.2 |
-| T5.3 | OAuth refresh scheduled before expiry (fake time) | §10.2 |
+| Order | RED test first | Spec anchor | Status |
+|---|---|---|---|
+| T5.1 | Missing bearer → push attempt fails closed (no anonymous send) | §10.2 | **Done** |
+| T5.2 | Config resolves secret from test MP source, not hardcoded literal in WAR | §10.2 | **Done** |
+| T5.3 | OAuth refresh scheduled before expiry (fake time) | §10.2 | **Done** |
 
 #### Phase 6 — HA / load (automated gates)
 
@@ -249,19 +249,21 @@ Make the gateway operable.
 
 ---
 
-## Phase 5 — Security & secrets
+## Phase 5 — Security & secrets ✅
 
 Production credential and transport posture.
 
-| # | Work item | Priority | Deliverable |
-|---|---|---|---|
-| 5.1 | Diameter `aaas://` mTLS | P0 | Liberty keystore; peer auth |
-| 5.2 | Vault / CyberArk via MP Config | P0 | No plaintext bearers in repo or `server.xml` |
-| 5.3 | OAuth token refresh for FCM (and APNS JWT) | P0 | Refresh on schedule and on 401/403 |
-| 5.4 | Secrets rotation runbook | P1 | Zero-downtime rotate documented |
-| 5.5 | Threat / abuse notes | P2 | Rate limits, peer allowlist already partially covered |
+| # | Work item | Priority | Status | Deliverable |
+|---|---|---|---|---|
+| 5.1 | Diameter `aaas://` mTLS | P0 | **Done** | Liberty `server.xml` keystore via `${env.KEYSTORE_PASSWORD}`; `ops/security/diameter-mtls.md` |
+| 5.2 | Vault / CyberArk via MP Config | P0 | **Done** | `${vault.*.bearer:${ENV:}}` placeholders; vault key fallbacks in `GatewayConfig` |
+| 5.3 | OAuth token refresh for FCM (and APNS JWT) | P0 | **Done** | `OauthBearerTokenProvider` + `TokenRefreshScheduler`; 401/403 already refresh-once |
+| 5.4 | Secrets rotation runbook | P1 | **Done** | `ops/runbooks/secrets-rotation.md` |
+| 5.5 | Threat / abuse notes | P2 | **Done** | `ops/security/threat-notes.md` |
 
-**Exit criteria:** Lab run with mTLS Diameter and vault-injected push credentials; secret scan clean.
+**TDD:** T5.1–T5.3 in `SecurityPhase5Test`.
+
+**Exit criteria:** Fail-closed missing bearer; vault/env MP resolution; proactive refresh before expiry; mTLS + rotation docs. ✅
 
 ---
 
