@@ -4,6 +4,8 @@ Real-time SIP `180 Ringing` → Diameter Sh (HSS) → APNS/FCM push gateway for 
 
 See [caller-display.md](caller-display.md) for the full product and technical specification.
 
+Implementation plan: [ROADMAP.md](ROADMAP.md).
+
 ## Layout
 
 ```
