@@ -6,6 +6,8 @@ See [caller-display.md](caller-display.md) for the full product and technical sp
 
 Implementation plan: [ROADMAP.md](ROADMAP.md).
 
+**Token provisioning (write path):** separate service — [push-token-enrollment/](push-token-enrollment/) (APNS/FCM → SPML → HSS). This gateway only **reads** tokens on ringing and **clears** them on push death.
+
 ## Layout
 
 ```

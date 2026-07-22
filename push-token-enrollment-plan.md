@@ -1,6 +1,6 @@
 # Token Enrollment API (SPML) — Plan
 
-**Status:** Proposed  
+**Status:** Implemented (separate project at [push-token-enrollment/](push-token-enrollment/))
 **Decisions:** Separate microservice (1B); pluggable `SpmlClient` with SOAP SPML 2.0 default + mock (2C)
 
 Related: [caller-display.md](caller-display.md) (push gateway — Sh UDR read / PUR purge only).

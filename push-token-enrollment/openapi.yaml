@@ -1,0 +1,76 @@
+openapi: 3.0.3
+info:
+  title: Push Token Enrollment API
+  version: 1.0.0
+  description: Provisions APNS/FCM device tokens into HSS RepositoryData via SPML.
+servers:
+  - url: https://localhost:9445/enrollment
+paths:
+  /v1/push-tokens/{msisdn}:
+    put:
+      summary: Upsert push token
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: msisdn
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform, deviceToken]
+              properties:
+                platform:
+                  type: string
+                  enum: [APNS, FCM]
+                deviceToken:
+                  type: string
+                appId:
+                  type: string
+      responses:
+        '204':
+          description: Token provisioned
+        '400':
+          description: Validation error
+        '401':
+          description: Missing bearer
+        '502':
+          description: SPML upstream failure
+    delete:
+      summary: Clear push token
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: msisdn
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Token cleared
+    get:
+      summary: Get token fingerprint (diagnostics)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: msisdn
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Stored token metadata
+        '404':
+          description: Not found
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
